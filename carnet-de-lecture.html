@@ -1,0 +1,947 @@
+<title>Carnet de lecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: library of book cards → book view with a chapter rail (table of contents) on the left and the reading desk on the right. */
+:root{
+  --bg:#eceee9; --surface:#fafbf8; --surface-2:#f2f4ef; --ink:#1c2330; --muted:#5b6470; --line:#d3d8cf;
+  --accent:#2d3c9c; --accent-soft:#e2e5f6; --accent-ink:#ffffff;
+  --hl:rgba(246,214,64,.55); --ok:#2b7a4b; --warn:#9a6200; --bad:#b3261e;
+  --f-read:"Literata", Georgia, "Times New Roman", serif;
+  --f-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#13161b; --surface:#1b1f26; --surface-2:#222731; --ink:#e5e8ed; --muted:#99a2ad; --line:#2e343e;
+  --accent:#9aa6ff; --accent-soft:#262c4d; --accent-ink:#10131c;
+  --hl:rgba(212,176,20,.38); --ok:#6cc28f; --warn:#e0a640; --bad:#f08178; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#13161b; --surface:#1b1f26; --surface-2:#222731; --ink:#e5e8ed; --muted:#99a2ad; --line:#2e343e;
+  --accent:#9aa6ff; --accent-soft:#262c4d; --accent-ink:#10131c;
+  --hl:rgba(212,176,20,.38); --ok:#6cc28f; --warn:#e0a640; --bad:#f08178; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 60px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-read);text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:1.9rem;font-weight:700}
+h2{font-size:1.35rem;font-weight:600}
+h3{font-size:1.02rem;font-weight:600}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+button,.btn{font:inherit;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  padding:8px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;line-height:1.2}
+button:hover,.btn:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.chip:focus-visible,.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+button.primary,.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.primary:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+button.ghost:hover{color:var(--ink);border-color:var(--line)}
+button.danger{color:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+input[type=checkbox]{width:auto}
+textarea{resize:vertical;min-height:140px;font-family:var(--f-read);line-height:1.6}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field>span{font-size:.8rem;color:var(--muted);font-weight:500}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grow{flex:1 1 auto;min-width:0}
+.langs{display:flex;flex-wrap:wrap;gap:6px}
+.langs label{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:.85rem;cursor:pointer;background:var(--surface)}
+.langs label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+
+/* top bar */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:16px}
+.brand{display:flex;flex-direction:column;gap:2px;min-width:0}
+.brand .label{color:var(--accent)}
+.banner{font-size:.85rem;padding:8px 12px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+
+/* library */
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.book{display:flex;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;text-align:left;padding:0;min-height:150px}
+.book:hover{border-color:var(--accent)}
+.spine{width:14px;flex:none;background:var(--spine,#2d3c9c)}
+.book .body{padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.book h3{font-size:1.1rem}
+.stats{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);margin-top:auto}
+.tag{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.empty{padding:28px;text-align:left;display:flex;flex-direction:column;gap:10px;border:1px dashed var(--line);border-radius:var(--r)}
+
+/* book view */
+.layout{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:820px){.layout{grid-template-columns:1fr}}
+.rail{position:sticky;top:calc(env(safe-area-inset-top, 0px) + 12px);display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+@media (max-width:820px){.rail{position:static}}
+.toc-item{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:baseline;text-align:left;border:1px solid transparent;background:transparent;padding:8px;border-radius:7px;width:100%}
+.toc-item:hover{background:var(--surface-2);border-color:transparent}
+.toc-item.on{background:var(--accent-soft);color:var(--ink)}
+.toc-num{font-family:var(--f-mono);font-size:.8rem;color:var(--muted)}
+.toc-title{font-family:var(--f-read);font-weight:600;overflow-wrap:anywhere}
+.toc-pages{font-family:var(--f-mono);font-size:.74rem;color:var(--muted);white-space:nowrap}
+.main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.bookhead{display:flex;flex-direction:column;gap:6px;min-width:0}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.88rem;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:500}
+
+/* drop zone + queue */
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;background:var(--surface-2)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.queue{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.qitem{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);display:flex;flex-direction:column;font-size:.75rem;min-width:0}
+.qitem img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--surface-2)}
+.qitem .st{padding:5px 7px;display:flex;justify-content:space-between;gap:4px;align-items:center}
+.qitem .qerr{padding:0 7px 7px;color:var(--bad);font-size:.72rem;line-height:1.35;overflow-wrap:anywhere}
+.st-working{color:var(--accent)} .st-done{color:var(--ok)} .st-error{color:var(--bad)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tab{border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:8px 12px;color:var(--muted)}
+.tab.on{color:var(--ink);border-bottom-color:var(--accent)}
+.progress{height:6px;background:var(--surface-2);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+
+/* summary */
+.summary{display:flex;flex-direction:column;gap:18px}
+.overview{font-family:var(--f-read);font-size:1.05rem;line-height:1.7;max-width:68ch;display:flex;flex-direction:column;gap:10px}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.sbox{display:flex;flex-direction:column;gap:8px;min-width:0}
+.sbox ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.sbox li{display:flex;flex-direction:column;gap:3px;padding-bottom:8px;border-bottom:1px solid var(--line);min-width:0;overflow-wrap:anywhere}
+.sbox li:last-child{border-bottom:none}
+.hl{background:linear-gradient(transparent 55%, var(--hl) 55%);padding:0 2px}
+.date{font-family:var(--f-mono);font-weight:500;color:var(--accent);font-size:.88rem}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-family:var(--f-mono);font-size:.74rem;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);padding:1px 7px;border-radius:99px;cursor:pointer}
+.chip:hover{color:var(--accent);border-color:var(--accent)}
+.ref{font-family:var(--f-read);font-size:.92rem}
+.themes{display:flex;flex-wrap:wrap;gap:6px}
+
+/* pages */
+.pages{display:flex;flex-direction:column;gap:12px}
+.pagecard{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:8px;scroll-margin-top:20px;transition:box-shadow .3s;min-width:0}
+.pagecard.flash{box-shadow:0 0 0 3px var(--accent)}
+.pno{font-family:var(--f-mono);font-weight:500;font-size:.85rem;color:var(--accent)}
+.pagecard ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+details summary{cursor:pointer;color:var(--muted);font-size:.85rem}
+.transcript{font-family:var(--f-read);line-height:1.7;white-space:pre-wrap;max-width:68ch;margin-top:8px;font-size:.95rem;overflow-wrap:anywhere}
+.answer{display:flex;flex-direction:column;gap:10px}
+.answer blockquote{margin:0;font-family:var(--f-read);line-height:1.65;padding:10px 14px;background:var(--surface-2);border-radius:8px;border:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.err{color:var(--bad);font-size:.88rem}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom, 0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:.9rem;z-index:20;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap" id="app"><p class="muted">Chargement du carnet…</p></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+/* ===== ANALYSE (moteur intégré, sans IA) ===== */
+const Analyse = (() => {
+  const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const SW = {
+    fra: "le la les un une des de du d l au aux et ou mais donc or ni car que qui quoi dont ou ce cet cette ces se sa son ses leur leurs lui elle il ils elles on nous vous je tu me te mon ma mes ton ta tes notre nos votre vos en dans par pour sur sous avec sans entre vers chez plus moins tres tout tous toute toutes ne pas n y a est sont ete etre avoir ont avait etaient etait fait faire comme si aussi bien meme encore deja alors puis ainsi cela ca c s qu j m t non oui peu trop autre autres apres avant depuis pendant lors quand comment pourquoi parce celui celle ceux celles cet sera seront fut furent peut doit leurs dont ici la",
+    eng: "the a an and or but of to in on at by for with from as is are was were be been being have has had do does did not no so if then than that this these those it its he she they we you i him her them his their our your my me us who whom which what when where why how all any each more most other some such only own same too very can will just should would could there here into over under after before about also up out",
+    spa: "el la los las un una unos unas de del al y o pero que quien cual en por para con sin sobre entre hacia desde es son fue fueron ser estar esta estan era eran ha han habia se su sus le les lo me te nos os mi tu yo el ella ellos ellas no si como mas muy ya tambien porque cuando donde este esta estos estas ese esa eso aquel todo todos toda todas otro otra",
+    ita: "il lo la i gli le un uno una di del dello della dei degli delle a al allo alla ai agli alle da dal in nel nella nei con su sul per tra fra e o ma che chi cui non si come piu anche se gia quando dove questo questa questi quelle quello sono era erano fu essere ha hanno aveva suo sua suoi sue lui lei loro noi voi io tu mi ti ci vi tutto tutti",
+    deu: "der die das den dem des ein eine einer eines einem einen und oder aber doch denn dass als wie wenn ob zu zum zur in im an am auf aus bei mit nach von vor uber unter durch fur gegen ohne um ist sind war waren sein hat haben hatte wird werden wurde nicht kein keine auch noch schon nur so sehr er sie es wir ihr ich du man sich sein seine ihre ihr dieser diese dieses jener alle",
+    lat: "et in est non cum ad ut sed quod qui quae quam per ab a ex e de sunt esse erat fuit hoc haec hic hi hae ille illa illud is ea id eius eorum earum quorum quarum ipse ipsa ipsum ipsorum se sui sibi suo sua suum nec neque aut vel atque ac enim autem vero etiam tamen nam si ne quoque iam tum dum ubi inter post ante sine pro sub super apud omnis omnes omnia nihil semper nunc tunc sic ita noster nostra vester unus alius aliam unam tres",
+    grc: "και ο η το οι αι τα του της των τω τη τον την τοις ταις δε τε γαρ μεν ουν αλλα ου ουκ ουχ μη εν εις εκ εξ επι προς απο δια κατα μετα περι υπο παρα υπερ ως ωσπερ αυτος αυτου αυτον εστι εστιν ειναι ην ος η ο τις τι ουτος τουτο αν ει εαν οτι",
+    ell: "και ο η το οι τα του της των τον την στο στη στον στην σε με για απο που να θα δεν μη ειναι ηταν εχει ειχε αυτος αυτη αυτο αυτοι ενα μια ενας ως οπως ομως αλλα οταν οτι πολυ",
+  };
+  const STOP = {}; for (const k in SW) STOP[k] = new Set(SW[k].split(" ").map(norm));
+  const ALLSTOP = new Set(Object.values(STOP).flatMap(s => [...s]));
+  const MONTHS = "janvier|fevrier|février|mars|avril|mai|juin|juillet|aout|août|septembre|octobre|novembre|decembre|décembre|january|february|march|april|may|june|july|august|september|october|november|december|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|gennaio|febbraio|aprile|maggio|giugno|luglio|settembre|ottobre|dicembre|januar|jänner|februar|märz|maerz|juni|juli|oktober|dezember|ianuarius|ianuarii|februarius|martius|martii|aprilis|maius|maii|iunius|iulius|augustus|augusti|october|novembris|decembris|ιανουαριου|ιανουάριος|φεβρουαριου|μαρτιου|μάρτιος|απριλιου|απρίλιος|μαιου|μάιος|ιουνιου|ιούνιος|ιουλιου|ιούλιος|αυγουστου|αύγουστος|σεπτεμβριου|σεπτέμβριος|οκτωβριου|οκτώβριος|νοεμβριου|νοέμβριος|δεκεμβριου|δεκέμβριος";
+  const ERA = "av\\.?\\s?J\\.?-?C\\.?|apr\\.?\\s?J\\.?-?C\\.?|av\\.?\\s?n\\.?\\s?è\\.?|BC|AD|BCE|CE|a\\.?\\s?C\\.?|d\\.?\\s?C\\.?|v\\.?\\s?Chr\\.?|n\\.?\\s?Chr\\.?|π\\.?\\s?Χ\\.?|μ\\.?\\s?Χ\\.?";
+  const CHAP = /^\s*(chapitre|chap\.?|partie|livre|chapter|part|book|cap[ií]tulo|parte|libro|capitolo|kapitel|teil|buch|caput|liber|pars|κεφ[άα]λαιο|κεφ\.|βιβλ[ίι]ο|μ[έε]ρος)\b\s*([0-9]+|[IVXLCDM]+|[a-zà-ÿ]+|[α-ωάέήίόύώ]+['΄ʹ]?)?/i;
+  const REFLINE = /^\s*(\(?\d{1,3}\)?|\*{1,3}|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\[\d{1,3}\])[\s.)\]]+(.{12,})$/;
+  const BIB = /(\b1[5-9]\d{2}\b|\b20[0-3]\d\b|\bp\.\s*\d|\bpp\.|\bS\.\s*\d|op\.\s*cit|ibid|ibidem|\bid\.|\béd\.|\bed\.|\beds?\.|édition|editions|edizioni|edición|verlag|\bvol\.|\bt\.\s*[0-9IVX]|\bn°|\bno\.\s*\d|\bcf\.|\bvgl\.|https?:\/\/|www\.|Paris|London|New York|Oxford|Cambridge|Berlin|Madrid|Roma|Milano|Gallimard|Seuil|PUF|Fayard|Flammarion|Albin Michel|Belles Lettres|Teubner|University|Press|Penguin|Suhrkamp|Einaudi|Laterza)/i;
+  const CUE = /\b(soudain|tout à coup|brusquement|finalement|meurt|mourut|mort|tué|naissance|naît|mariage|épouse|bataille|guerre|victoire|défaite|découvr|révèl|décid|fuit|rencontr|trahi|crise|révolution|fond[eéa]|invent|traité|accident|procès|exil|couronn|assassin|suddenly|finally|died|death|killed|born|married|battle|war|victory|defeat|discover|reveal|decid|fled|met |betray|crisis|revolution|founded|invented|treaty|trial|crown|murder|de repente|murió|muerte|nació|batalla|guerra|victoria|derrota|descubr|fundó|tratado|improvvisamente|morì|morte|nacque|battaglia|vittoria|sconfitta|scopr|fondò|trattato|plötzlich|starb|tod|geboren|schlacht|krieg|sieg|niederlage|entdeck|gründete|vertrag|mortuus|natus|bellum|proelium|victoria|vicit|interfectus|condidit|πόλεμ|μάχη|μάχ|νίκη|ἐνίκ|απέθαν|ἀπέθαν|θάνατ|γεννήθηκε|ίδρυσε|συνθήκη)/i;
+  const KEYCUE = /\b(important|essentiel|principal|fondamental|surtout|en effet|donc|ainsi|en conclusion|en somme|cause|conséquence|grâce|permet|key|main|essential|therefore|thus|because|result|crucial|importante|principal|por tanto|así|fondamentale|quindi|perciò|wichtig|wesentlich|daher|deshalb|also|igitur|ergo|itaque|enim|γάρ|οὖν|άρα|επομένως)\b/i;
+  const TITLE = /^(m\.|mme|mlle|dr|st|ste|saint|sainte|roi|reine|empereur|général|docteur|professeur|monsieur|madame|maître|pape|mr\.?|mrs\.?|ms\.?|sir|lord|lady|king|queen|emperor|pope|don|doña|señor|señora|san|santa|re|papa|herr|frau|kaiser|könig|rex|imperator)$/i;
+
+  function detectLang(text) {
+    const ws = (text.match(/[\p{L}]+/gu) || []).slice(0, 1500).map(norm);
+    if (!ws.length) return "fra";
+    if (ws.filter(w => /[α-ω]/.test(w)).length > ws.length * 0.4) return /[ἀ-ῼ]/.test(text) ? "grc" : "ell";
+    const L = ["fra", "eng", "spa", "ita", "deu", "lat"];
+    let best = "fra", bs = -1;
+    for (const k of L) { const s = STOP[k]; let c = 0; for (const w of ws) if (s.has(w)) c += 1 / L.filter(o => STOP[o].has(w)).length; if (c > bs) { bs = c; best = k; } }
+    return best;
+  }
+  const stem = w => { w = norm(w); if (w.length > 6) return w.slice(0, Math.max(5, w.length - 3)); if (w.length > 4) return w.replace(/(es|s|e|x|n|um|us|a|o|i)$/, ""); return w; };
+  const words = s => (s.match(/[\p{L}][\p{L}'’\-]*/gu) || []).map(w => w.replace(/^[\p{L}]{1,2}['’]/u, ""));
+  const terms = (s, stop) => words(s).filter(w => w.length > 2 && !stop.has(norm(w)) && !ALLSTOP.has(norm(w))).map(stem);
+
+  // Sépare le texte brut d'une page : numéro de page, titre de chapitre, références, corps.
+  function parsePage(raw) {
+    const lines = String(raw || "").replace(/\r/g, "").split("\n").map(l => l.replace(/\s+$/, ""));
+    const keep = lines.map(() => true);
+    const nonEmpty = lines.map((l, i) => [l.trim(), i]).filter(x => x[0]);
+    let page = null, heading = null;
+    const edge = [...nonEmpty.slice(0, 2), ...nonEmpty.slice(-3)];
+    for (const [l, i] of edge) {
+      let m = l.match(/^[-–—•\s]*(\d{1,4})[-–—•\s]*$/) || l.match(/^(\d{1,4})\s{2,}\S.{0,60}$/) || l.match(/^\S.{0,60}\s{2,}(\d{1,4})$/) || l.match(/^([IVXLCivxlc]{1,6})$/);
+      if (m && !page) { page = m[1]; keep[i] = false; }
+    }
+    for (const [l, i] of nonEmpty.slice(0, 5)) {
+      if (heading || l.length > 90) continue;
+      if (CHAP.test(l)) {
+        heading = l.replace(/\s+/g, " ").trim(); keep[i] = false;
+        const nx = nonEmpty.find(x => x[1] > i);
+        if (nx && nx[0].length < 70 && !/[.;:!?]$/.test(nx[0]) && !REFLINE.test(nx[0]) && nx[1] - i <= 2 && /^\s*$/.test(heading.replace(CHAP, "").replace(/[\s.:—–-]/g, ""))) { heading += " — " + nx[0]; keep[nx[1]] = false; }
+      }
+    }
+    const refs = [];
+    lines.forEach((l, i) => {
+      const t = l.trim(); if (!t || !keep[i]) return;
+      const m = t.match(REFLINE);
+      if (m && BIB.test(t)) { let cit = m[2].trim(); const nx = lines[i + 1]?.trim(); if (nx && !REFLINE.test(nx) && !/[.)]$/.test(cit) && nx.length < 120) { cit += " " + nx; keep[i + 1] = false; } refs.push({ marker: m[1].replace(/[()[\]]/g, ""), citation: cit }); keep[i] = false; return; }
+      if (/^(sources?|fuentes?|fonti|quellen?|bibliograph\w*|cf\.|vgl\.|voir|see)\b/i.test(t) && BIB.test(t)) { refs.push({ marker: "", citation: t }); keep[i] = false; }
+    });
+    const bodyRaw = lines.filter((_, i) => keep[i]).join("\n");
+    const flat = bodyRaw.replace(/(\p{L})[-¬]\s*\n\s*(\p{Ll})/gu, "$1$2").replace(/\s*\n\s*/g, " ").replace(/[¹²³⁴⁵⁶⁷⁸⁹⁰]+/g, "").replace(/\s{2,}/g, " ");
+    const seen = new Set(refs.map(r => r.citation));
+    const inl = /\(([\p{Lu}][\p{L}'’ .\-]{1,40}(?:et al\.)?,?\s+(?:1[5-9]|20)\d{2}[a-z]?(?:\s*[,:]\s*(?:p+\.|S\.)?\s*\d+(?:[-–]\d+)?)?)\)/gu;
+    let m; while ((m = inl.exec(flat))) if (!seen.has(m[1])) { seen.add(m[1]); refs.push({ marker: "", citation: m[1] }); }
+    (flat.match(/https?:\/\/\S+|www\.\S+/g) || []).forEach(u => { if (!seen.has(u)) { seen.add(u); refs.push({ marker: "", citation: u }); } });
+    return { page, heading, refs, body: flat.trim() };
+  }
+
+  function sentences(flat) {
+    const parts = flat.match(/[^.!?;…·]+(?:[.!?;…·]+["»”’)\]]*|$)\s*/g) || [];
+    const out = [];
+    for (let p of parts) {
+      p = p.trim(); if (!p) continue;
+      const prev = out[out.length - 1];
+      if (prev && (/\b(M|Mme|Mlle|Dr|St|Ste|Mr|Mrs|Sr|Sra|Hr|p|pp|cf|vgl|ibid|vol|n°|etc|av|apr|J\.-C|ca|env|bzw|z\.B|[A-ZΑ-Ω]|\d+\s?[adnv]|\d+\s?(?:av|apr))\.$/.test(prev) || /(^|\s)\d{1,2}\.$/.test(prev) || /\d\s?[adnv]\.\s?$/i.test(prev) && /^[CXJcχ]\./.test(p) || /^[\p{Ll}\d]/u.test(p) && prev.length < 25)) { out[out.length - 1] = prev + " " + p; continue; }
+      out.push(p);
+    }
+    return out.map(s => s.trim()).filter(s => s.length >= 20 && (s.match(/\p{L}/gu) || []).length > s.length * 0.55);
+  }
+
+  function datesIn(s) {
+    const found = []; let work = s;
+    const res = [
+      new RegExp(`\\b(\\d{1,2}(?:er|º|°|\\.)?\\s+(?:de\\s+)?(?:${MONTHS})(?:\\s+(?:de\\s+)?\\d{1,4})?)\\b`, "giu"),
+      new RegExp(`\\b((?:${MONTHS})\\s+\\d{1,2},?\\s+\\d{3,4})\\b`, "giu"),
+      new RegExp(`\\b((?:${MONTHS})\\s+(?:de\\s+)?\\d{3,4})\\b`, "giu"),
+      /\b(\d{1,2}[/.]\d{1,2}[/.](?:\d{4}|\d{2}))\b/g,
+      new RegExp(`\\b(\\d{1,4}\\s?(?:${ERA}))(?=[\\s,.;:)]|$)`, "gu"),
+      /\b((?:années|years|años|anni|jahre)\s+(?:1[0-9]|20)\d0)\b/giu,
+      /\b((?:1[0-9]|20)\d0s)\b/g,
+      /\b([IVXLC]{1,5}(?:e|ème|eme|ᵉ)\s+siècle|[IVXLC]{1,5}\.?\s+(?:siglo|secolo|Jahrhundert|century)|\d{1,2}(?:st|nd|rd|th)\s+century|\d{1,2}\.\s+Jahrhundert)\b/giu,
+      /\b((?:1[0-9]|20)\d{2})\b(?!\s+[\p{Ll}])/gu,
+      /\b(?:en|vers|dès|depuis|in|en el|nel|im|anno|um|circa|ca\.)\s+((?:1[0-9]|20)\d{2})\b/giu,
+    ];
+    for (const re of res) {
+      re.lastIndex = 0; let m;
+      while ((m = re.exec(work))) { const d = m[1].trim(); found.push(d); work = work.slice(0, m.index) + " ".repeat(m[0].length) + work.slice(m.index + m[0].length); re.lastIndex = m.index + m[0].length; }
+    }
+    return found;
+  }
+  function yearKey(d) {
+    const neg = new RegExp(`(${"av|BC|BCE|a\\.?\\s?C|v\\.?\\s?Chr|π\\.?\\s?Χ"})`, "i").test(d);
+    let m = d.match(/(\d{3,4})/); if (m) return neg ? -parseInt(m[1]) : parseInt(m[1]);
+    m = d.match(/^([IVXLC]+)/i); if (m) { const r = { I: 1, V: 5, X: 10, L: 50, C: 100 }; let n = 0, prev = 0; for (const ch of m[1].toUpperCase().split("").reverse()) { const v = r[ch]; n += v < prev ? -v : v; prev = Math.max(prev, v); } return (n - 1) * 100 + 50; }
+    m = d.match(/(\d{1,2})(?:st|nd|rd|th|\.)/); if (m && /century|jahrh/i.test(d)) return (parseInt(m[1]) - 1) * 100 + 50;
+    m = d.match(/(\d{1,4})/); if (m) return neg ? -parseInt(m[1]) : parseInt(m[1]);
+    return 99999;
+  }
+
+  function namesIn(flat) {
+    const re = /((?:[\p{Lu}][\p{Ll}'’\-]+|[\p{Lu}]\.)(?:\s+(?:de\s+|d['’]|du\s+|des\s+|von\s+|van\s+|der\s+|del\s+|della\s+|da\s+|di\s+|of\s+|le\s+|la\s+)?(?:[\p{Lu}][\p{Ll}'’\-]+|[\p{Lu}]\.)){0,3})/gu;
+    const out = []; let m;
+    while ((m = re.exec(flat))) {
+      const before = flat.slice(Math.max(0, m.index - 3), m.index);
+      const start = m.index === 0 || /[.!?;:…»«"“·]\s*$|^\s*$/.test(before) && /[.!?;:…»«"“·]/.test(before + ".");
+      let toks = m[1].split(/\s+/);
+      while (toks.length && (ALLSTOP.has(norm(toks[0])) || CHAP.test(toks[0]))) toks.shift();
+      let title = "";
+      if (toks.length && TITLE.test(toks[0]) && toks.length > 1) { title = toks.shift(); }
+      while (toks.length && ALLSTOP.has(norm(toks[toks.length - 1]))) toks.pop();
+      if (!toks.length) continue;
+      const name = toks.join(" ");
+      if (name.length < 3 || new RegExp(`^(${MONTHS})$`, "i").test(name) || CHAP.test(name)) continue;
+      out.push({ name: (title ? title + " " : "") + name, key: name, start: start && !title && toks.length === 1 });
+    }
+    return out;
+  }
+
+  // Analyse d'un ensemble de pages (une page, un chapitre ou le livre)
+  function analyse(pages, opts = {}) {
+    const text = pages.map(p => p.text).join("\n");
+    const lang = opts.lang || detectLang(text);
+    const stop = STOP[lang] || STOP.fra;
+    const items = [], dates = new Map(), names = new Map(), refs = new Map(), moments = [];
+    pages.forEach((p, pi) => {
+      const pp = parsePage(p.text), pg = p.page ?? pp.page ?? "?";
+      const ss = sentences(pp.body);
+      ss.forEach((s, i) => items.push({ s, page: String(pg), pi, i, first: i === 0 && pi === 0 }));
+      pp.refs.forEach(r => { const k = norm(r.citation); const o = refs.get(k) || { citation: r.citation, marker: r.marker, pages: [] }; if (!o.pages.includes(String(pg))) o.pages.push(String(pg)); refs.set(k, o); });
+      ss.forEach(s => datesIn(s).forEach(d => { const ev = s.length > 220 ? s.slice(0, 217).trim() + "…" : s; const k = norm(d) + "|" + norm(ev).slice(0, 60); const o = dates.get(k) || { date: d, event: ev, pages: [], key: yearKey(d) }; if (!o.pages.includes(String(pg))) o.pages.push(String(pg)); dates.set(k, o); }));
+      namesIn(pp.body).forEach(n => { const o = names.get(n.key) || { name: n.name, count: 0, startOnly: 0, pages: [] }; o.count++; if (n.start) o.startOnly++; if (n.name.length > o.name.length) o.name = n.name; if (!o.pages.includes(String(pg))) o.pages.push(String(pg)); names.set(n.key, o); });
+    });
+    // fusionne "Gutenberg" dans "Johannes Gutenberg"
+    for (const [k, o] of names) if (!k.includes(" ")) { const full = [...names.entries()].find(([k2]) => k2 !== k && k2.split(" ").includes(k)); if (full) { full[1].count += o.count; o.pages.forEach(p => { if (!full[1].pages.includes(p)) full[1].pages.push(p); }); names.delete(k); } }
+    const nameStems = new Set([...names.keys()].flatMap(k => k.split(" ").map(stem)));
+
+    const tf = new Map();
+    items.forEach(it => { it.t = terms(it.s, stop); new Set(it.t).forEach(t => tf.set(t, (tf.get(t) || 0) + 1)); });
+    const N = Math.max(1, items.length);
+    items.forEach(it => {
+      const n = it.t.length; if (n < 4) { it.score = 0; return; }
+      let sc = 0; for (const t of new Set(it.t)) sc += Math.log(1 + tf.get(t));
+      sc /= Math.sqrt(n) + 2;
+      if (datesIn(it.s).length) sc *= 1.25;
+      if (KEYCUE.test(it.s)) sc *= 1.2;
+      if (CUE.test(it.s)) sc *= 1.1;
+      if (it.first) sc *= 1.2;
+      if (n > 50) sc *= 0.7;
+      if (/^[\p{Ll}]/u.test(it.s)) sc *= 0.7;
+      it.score = sc;
+    });
+    const jacc = (a, b) => { const A = new Set(a.t), B = new Set(b.t); let i = 0; A.forEach(x => B.has(x) && i++); return i / Math.max(1, A.size + B.size - i); };
+    const pick = (list, k) => { const out = []; for (const it of list) { if (out.length >= k) break; if (it.score <= 0) continue; if (out.some(o => jacc(o, it) > 0.5)) continue; out.push(it); } return out; };
+    const ranked = [...items].sort((a, b) => b.score - a.score);
+
+    const kOver = Math.max(Math.min(2, N), Math.min(opts.overview || 6, Math.round(N * (opts.ratio || 0.15))));
+    const over = pick(ranked, kOver).sort((a, b) => a.pi - b.pi || a.i - b.i);
+    const paras = []; for (let i = 0; i < over.length; i += 3) paras.push(over.slice(i, i + 3).map(x => x.s).join(" "));
+    const key_points = pick(ranked, opts.points || 8).map(it => ({ point: it.s, pages: [it.page] }));
+    const momentsL = pick(ranked.filter(it => CUE.test(it.s)), 5).sort((a, b) => a.pi - b.pi || a.i - b.i).map(it => ({ title: it.s, pages: [it.page] }));
+
+    const people = [...names.values()].filter(o => o.name.includes(" ") || o.count - o.startOnly >= 1 && o.count >= 2 || /^\S+\s/.test(o.name) )
+      .sort((a, b) => b.count - a.count).slice(0, 14).map(o => ({ name: o.name, role: o.count > 1 ? `cité ${o.count} fois` : "cité une fois", pages: o.pages }));
+    const datesL = [...dates.values()].sort((a, b) => a.key - b.key).slice(0, 40);
+    const themes = [...tf.entries()].filter(([t, f]) => f >= 2 && t.length >= 4 && !nameStems.has(t)).sort((a, b) => b[1] - a[1]).slice(0, 7)
+      .map(([t]) => { const w = {}; items.forEach(it => words(it.s).forEach(x => { if (stem(x) === t) { const lx = x.toLowerCase(); w[lx] = (w[lx] || 0) + 1; } })); return Object.entries(w).sort((a, b) => b[1] - a[1])[0]?.[0] || t; });
+    return { lang, overview: paras.join("\n\n"), key_points, dates: datesL, people, moments: momentsL, references: [...refs.values()], themes, items, stop };
+  }
+
+  // Recherche des passages qui répondent à une question
+  function search(q, pages, lang) {
+    const a = analyse(pages, { lang });
+    const qt = [...new Set(terms(q, a.stop))]; if (!qt.length) return [];
+    const df = new Map(); a.items.forEach(it => new Set(it.t).forEach(t => df.set(t, (df.get(t) || 0) + 1)));
+    const N = a.items.length || 1;
+    const qy = datesIn(q);
+    return a.items.map(it => { const set = new Set(it.t); let sc = 0, hit = 0; qt.forEach(t => { if (set.has(t)) { sc += Math.log(1 + N / (df.get(t) || 1)); hit++; } else if ([...set].some(x => x.length > 4 && (x.startsWith(t) || t.startsWith(x)))) sc += 0.5; }); if (qy.length && qy.some(d => it.s.includes(d))) sc += 2; return { s: it.s, page: it.page, score: hit ? sc * (hit / qt.length + 0.5) : sc * 0.3 }; })
+      .filter(x => x.score > 0.4).sort((a, b) => b.score - a.score).slice(0, 5);
+  }
+  return { analyse, parsePage, search, detectLang, datesIn, sentences };
+})();
+/* ===== FIN ANALYSE ===== */
+</script>
+<script>
+/* ---------- utils ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uid = (p = "") => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9α-ω]+/g, " ").trim();
+const pnum = p => { const m = String(p ?? "").match(/\d+/); return m ? parseInt(m[0], 10) : Infinity; };
+const arr = x => Array.isArray(x) ? x : [];
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3500); }
+const SPINES = ["#2d3c9c", "#7a3b69", "#2b6e62", "#8a5a1f", "#3e5a7a", "#6b4fa0", "#a0433a"];
+const spineFor = s => SPINES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % SPINES.length];
+const LANGS = [["fra", "Français"], ["eng", "Anglais"], ["spa", "Espagnol"], ["ita", "Italien"], ["deu", "Allemand"], ["lat", "Latin"], ["grc", "Grec ancien"], ["ell", "Grec moderne"]];
+const langName = c => LANGS.find(l => l[0] === c)?.[1] || c;
+const TYPES = [["livre", "Livre"], ["article", "Article"], ["cours", "Cours"], ["rapport", "Rapport / étude"], ["notes", "Notes"], ["autre", "Autre document"]];
+const typeOf = b => TYPES.find(t => t[0] === (b?.type || "livre")) || TYPES[0];
+const isBook = b => (b?.type || "livre") === "livre";
+const W = b => isBook(b)
+  ? { one: "chapitre", many: "chapitres", the: "le chapitre", this: "ce chapitre", all: "tout le chapitre", New: "Nouveau chapitre", none: "Sans chapitre", toc: "Table des chapitres", first: "Début du livre" }
+  : { one: "partie", many: "parties", the: "la partie", this: "cette partie", all: "toute la partie", New: "Nouvelle partie", none: "Sans partie", toc: "Plan du document", first: "Texte principal" };
+const LEN = { court: { label: "Court", overview: 3, points: 5, ratio: 0.1 }, moyen: { label: "Moyen", overview: 6, points: 8, ratio: 0.2 }, long: { label: "Détaillé", overview: 14, points: 14, ratio: 0.45 } };
+let savedLen = "moyen"; try { savedLen = localStorage.getItem("carnet-len") || "moyen"; } catch {}
+
+/* ---------- example book (shown only while the library is empty, never saved) ---------- */
+const EX_ID = "exemple";
+const EXAMPLE = {
+  book: { id: EX_ID, example: true, title: "Petite histoire de l'imprimerie", author: "Livre d'exemple", year: "", publisher: "", genre: "Histoire", langs: ["fra"],
+    notes: "Ce livre sert de démonstration : il montre ce que l'application relève sur quelques pages.",
+    chapters: [{ id: "c1", title: "Chapitre 1 — Mayence, vers 1450", order: 0 }, { id: "c2", title: "Chapitre 2 — Les presses arrivent à Paris", order: 1 }], createdAt: 0 },
+  pages: [
+    { id: "p1", chapterId: "c1", page: "11", source: "photo", addedAt: 1, text: "Chapitre 1 — Mayence, vers 1450\n\nVers 1450, à Mayence, l'orfèvre Johannes Gutenberg met au point un procédé qui va transformer la diffusion du savoir en Europe. Son idée principale est de fondre des caractères mobiles en métal, tous identiques, que l'on peut assembler pour composer n'importe quel texte puis réutiliser.¹\n\nGutenberg utilise un alliage de plomb, d'étain et d'antimoine qui fond facilement et durcit vite. Grâce à un moule à main de son invention, un ouvrier peut produire des centaines de caractères par jour.\n\n11\n¹ L. Febvre et H.-J. Martin, L'Apparition du livre, Paris, Albin Michel, 1958." },
+    { id: "p2", chapterId: "c1", page: "12", source: "photo", addedAt: 2, text: "La presse elle-même s'inspire des pressoirs à vin utilisés dans la vallée du Rhin. Gutenberg met aussi au point une encre grasse, à base d'huile, qui adhère au métal bien mieux que les encres à l'eau des copistes.\n\nL'atelier coûte cher. Johann Fust, un riche bourgeois de Mayence, avance l'argent nécessaire. En 1455, Fust attaque Gutenberg en justice pour obtenir le remboursement de ses prêts, et ce procès lui permet de récupérer une grande partie du matériel de l'atelier.\n\n12" },
+    { id: "p3", chapterId: "c1", page: "13", source: "photo", addedAt: 3, text: "Le grand œuvre de l'atelier est la Bible dite à 42 lignes, achevée vers 1455. On estime qu'environ 180 exemplaires de cette Bible ont été tirés, certains sur papier, d'autres sur parchemin. C'est le premier grand livre imprimé en Europe avec des caractères mobiles.\n\nEn quelques décennies, la technique de Gutenberg se répand dans toute l'Europe : en 1500, des presses fonctionnent dans plus de deux cents villes.²\n\n13\n² Voir L. Febvre et H.-J. Martin, op. cit." },
+    { id: "p4", chapterId: "c2", page: "21", source: "texte", addedAt: 4, text: "Chapitre 2 — Les presses arrivent à Paris\n\nEn 1470, trois imprimeurs venus d'Allemagne, Ulrich Gering, Michael Friburger et Martin Crantz, installent la première presse de Paris dans les murs de la Sorbonne. Ils y sont appelés par Guillaume Fichet, bibliothécaire de la Sorbonne, et par Johann Heynlin, son prieur.\n\nLe premier livre sorti de cet atelier parisien est un recueil de lettres de Gasparin de Bergame, un manuel de style latin destiné aux étudiants de la Sorbonne.\n\n21" },
+  ],
+};
+
+/* ---------- storage: claude db (per viewer, private) with a browser fallback ---------- */
+const Store = {
+  mode: "local", db: null, uid: null,
+  async init(db, user) {
+    try { this.uid = user ? await user.id() : null; } catch { this.uid = null; }
+    if (db && this.uid) { this.db = db; this.mode = "db"; }
+  },
+  base() { return "data/users/" + this.uid; },
+  lsGet() { try { return JSON.parse(localStorage.getItem("carnet-lecture-v1") || "{}"); } catch { return {}; } },
+  lsSet(o) { try { localStorage.setItem("carnet-lecture-v1", JSON.stringify(o)); } catch { toast("Impossible d'enregistrer dans ce navigateur."); } },
+  async listBooks() {
+    if (this.mode === "db") { const s = await this.db.collection(this.base()).get(); return s.docs.map(d => d.data()).filter(b => b && b.id); }
+    return Object.values(this.lsGet().books || {});
+  },
+  async saveBook(b) {
+    if (this.mode === "db") return this.db.collection(this.base()).doc(b.id).set(JSON.parse(JSON.stringify(b)));
+    const o = this.lsGet(); o.books = o.books || {}; o.books[b.id] = b; this.lsSet(o);
+  },
+  async deleteBook(b, pages) {
+    if (this.mode === "db") {
+      for (const p of pages) await this.pageRef(b.id, p.id).delete();
+      return this.db.collection(this.base()).doc(b.id).delete();
+    }
+    const o = this.lsGet(); delete (o.books || {})[b.id]; delete (o.pages || {})[b.id]; this.lsSet(o);
+  },
+  pageRef(bid, pid) { return this.db.doc(this.base() + "/" + bid).collection("pages").doc(pid); },
+  async listPages(bid) {
+    if (this.mode === "db") { const s = await this.db.doc(this.base() + "/" + bid).collection("pages").get(); return s.docs.map(d => d.data()); }
+    return Object.values((this.lsGet().pages || {})[bid] || {});
+  },
+  async savePage(bid, p) {
+    const clean = { id: p.id, chapterId: p.chapterId, page: p.page ?? null, text: p.text || "", source: p.source, addedAt: p.addedAt };
+    if (this.mode === "db") return this.pageRef(bid, p.id).set(clean);
+    const o = this.lsGet(); o.pages = o.pages || {}; (o.pages[bid] = o.pages[bid] || {})[p.id] = clean; this.lsSet(o);
+  },
+  async deletePage(bid, pid) {
+    if (this.mode === "db") return this.pageRef(bid, pid).delete();
+    const o = this.lsGet(); delete ((o.pages || {})[bid] || {})[pid]; this.lsSet(o);
+  },
+};
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), ms))]);
+
+/* ---------- OCR (Tesseract, dans le navigateur) ---------- */
+const OCR = {
+  worker: null, langs: "", loading: null, onProgress: null,
+  base() { return new URL("tess/", document.baseURI).href; },
+  async get(langs) {
+    if (!window.Tesseract) throw { msg: "Le moteur de lecture n'a pas pu se charger. Vérifiez la connexion internet puis rechargez la page." };
+    const key = langs.join("+");
+    if (this.worker && this.langs === key) return this.worker;
+    if (this.loading && this.loadingKey === key) return this.loading;
+    if (this.worker) { try { await this.worker.terminate(); } catch {} this.worker = null; }
+    const base = this.base();
+    this.loadingKey = key;
+    this.loading = (async () => {
+      const w = await Tesseract.createWorker(langs, 1, {
+        workerPath: base + "worker-relais.js", corePath: base, langPath: base.replace(/\/$/, ""),
+        workerBlobURL: false, gzip: true, cacheMethod: "none",
+        logger: m => this.onProgress?.(m),
+        errorHandler: e => console.warn("OCR", e),
+      });
+      this.worker = w; this.langs = key; this.loading = null; return w;
+    })().catch(e => { this.loading = null; throw { msg: "Le moteur de lecture n'a pas démarré (" + (e?.message || e) + ")." }; });
+    return this.loading;
+  },
+};
+async function loadImage(file) {
+  let bmp = null;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch {}
+  if (!bmp) {
+    bmp = await new Promise((res, rej) => { const img = new Image(); const u = URL.createObjectURL(file); img.onload = () => res(img); img.onerror = () => rej({ msg: "Ce format de photo n'est pas lisible par le navigateur (souvent HEIC). Réglez l'appareil photo sur « Le plus compatible » (JPEG) ou faites une capture d'écran de la photo." }); img.src = u; });
+  }
+  const w = bmp.width, h = bmp.height, scale = Math.min(1, 2400 / Math.max(w, h));
+  const c = document.createElement("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+  const ctx = c.getContext("2d"); ctx.filter = "grayscale(1) contrast(1.15)"; ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  return c;
+}
+
+/* ---------- state ---------- */
+const S = {
+  ready: false, loadErr: "", books: [], view: "library", bookId: null, sel: "overview",
+  pages: {}, showNewBook: false, editBook: false, addOpen: false, addTab: "photos",
+  staged: [], running: false, stopReq: false, answer: null, answerFor: null, editing: null,
+  confirmDel: null, resetForms: false, renaming: null, len: LEN[savedLen] ? savedLen : "moyen", pageSum: {},
+};
+const lenOpts = (b, extra = {}) => { const l = LEN[S.len]; return { lang: anaLang(b), overview: l.overview, points: l.points, ratio: l.ratio, ...extra }; };
+const lenCtl = () => `<div class="row small" role="group" aria-label="Longueur du résumé"><span class="muted small">Longueur</span>${Object.entries(LEN).map(([k, v]) => `<button class="${S.len === k ? "primary" : ""} small" style="padding:4px 10px" data-a="len" data-id="${k}" aria-pressed="${S.len === k}">${v.label}</button>`).join("")}</div>`;
+const book = () => S.bookId === EX_ID ? EXAMPLE.book : S.books.find(b => b.id === S.bookId);
+const pagesOf = bid => (bid === EX_ID ? EXAMPLE.pages : (S.pages[bid] || []));
+const sortPages = ps => [...ps].sort((a, b) => (pnum(a.page) - pnum(b.page)) || (a.addedAt - b.addedAt));
+const chPages = (bid, cid) => sortPages(pagesOf(bid).filter(p => p.chapterId === cid));
+const chapters = b => [...(b?.chapters || [])].sort((a, c) => a.order - c.order);
+const bookLangs = b => arr(b?.langs).length ? b.langs : ["fra"];
+const anaLang = b => bookLangs(b).length === 1 ? bookLangs(b)[0] : undefined;
+function range(ps) {
+  const n = ps.map(p => pnum(p.page)).filter(Number.isFinite);
+  if (!n.length) return ps.length ? ps.length + " p." : "";
+  const lo = Math.min(...n), hi = Math.max(...n);
+  return lo === hi ? "p. " + lo : "p. " + lo + "–" + hi;
+}
+const anaCache = new Map();
+function analyseCached(key, ps, opts) {
+  const sig = key + "|" + JSON.stringify(opts) + "|" + ps.map(p => p.id + ":" + (p.text || "").length + ":" + p.page).join(",");
+  if (!anaCache.has(sig)) { if (anaCache.size > 60) anaCache.clear(); anaCache.set(sig, Analyse.analyse(ps, opts)); }
+  return anaCache.get(sig);
+}
+
+/* ---------- render ---------- */
+const app = $("#app");
+function render() {
+  const keep = {};
+  if (!S.resetForms) app.querySelectorAll("input[id],textarea[id],select[id]").forEach(el => { if (el.type !== "file" && el.type !== "checkbox") keep[el.id] = el.value; });
+  S.resetForms = false;
+  const focus = document.activeElement?.id;
+  app.innerHTML = !S.ready ? `<p class="muted">Chargement du carnet…</p>` : (S.view === "library" ? vLibrary() : vBook());
+  for (const [id, v] of Object.entries(keep)) { const el = document.getElementById(id); if (!el) continue; if (el.tagName !== "SELECT" || [...el.options].some(o => o.value === v)) el.value = v; }
+  if (focus) document.getElementById(focus)?.focus?.({ preventScroll: true });
+  bindDrop();
+}
+
+function topbar(right = "") {
+  return `<header class="top"><div class="brand"><span class="label">Carnet de lecture</span><h1>${S.view === "library" ? "Ma bibliothèque" : esc(book()?.title)}</h1></div><div class="row">${right}</div></header>
+  ${Store.mode === "local" ? `<div class="banner">Vos documents sont enregistrés dans ce navigateur uniquement. Pour les retrouver sur un autre appareil, utilisez « Exporter » ici puis « Importer » là-bas.</div>` : ""}`;
+}
+
+function bookForm(b = {}) {
+  const f = (id, label, v, ph = "") => `<label class="field"><span>${label}</span><input id="${id}" value="${esc(v)}" placeholder="${esc(ph)}"></label>`;
+  const ls = bookLangs(b);
+  return `<div class="formgrid">
+    <label class="field"><span>Type</span><select id="bf-type">${TYPES.map(([c, n]) => `<option value="${c}" ${(b.type || "livre") === c ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+    ${f("bf-title", "Titre *", b.title, "Ex. La Guerre des Gaules, un article du Monde…")}
+    ${f("bf-author", "Auteur", b.author)}
+    ${f("bf-year", "Année", b.year)}
+    ${f("bf-publisher", "Éditeur, journal, source", b.publisher)}
+    ${f("bf-genre", "Sujet / genre", b.genre, "Roman, histoire, droit…")}
+  </div>
+  <div class="field"><span>Langue(s) du texte, pour la lecture des photos</span><div class="langs">${LANGS.map(([c, n]) => `<label><input type="checkbox" name="bf-lang" value="${c}" ${ls.includes(c) ? "checked" : ""}>${n}</label>`).join("")}</div>
+  <span class="muted small">Cochez seulement les langues présentes : chaque langue en plus ralentit la lecture.</span></div>
+  <label class="field"><span>Notes, contexte, objectif de lecture</span><textarea id="bf-notes" style="min-height:80px">${esc(b.notes)}</textarea></label>`;
+}
+
+function vLibrary() {
+  const books = [...S.books].sort((a, b) => b.createdAt - a.createdAt);
+  const card = b => {
+    const n = b.example ? EXAMPLE.pages.length : (S.pages[b.id]?.length ?? b.pageCount ?? 0);
+    return `<button class="book" data-a="open" data-id="${esc(b.id)}" style="--spine:${spineFor(b.title)}"><span class="spine"></span><span class="body">
+      <span class="row" style="gap:4px"><span class="tag">${esc(typeOf(b)[1])}</span>${b.example ? `<span class="tag">Exemple</span>` : ""}</span>
+      <h3>${esc(b.title)}</h3><span class="muted small">${esc([b.author, b.year, b.publisher].filter(Boolean).join(" · "))}</span>
+      <span class="muted small">${esc(bookLangs(b).map(langName).join(", "))}</span>
+      <span class="stats">${b.chapters.length} ${b.chapters.length > 1 ? W(b).many : W(b).one} · ${n} page${n > 1 ? "s" : ""}</span></span></button>`;
+  };
+  const shown = books.length ? books : [EXAMPLE.book];
+  return `${topbar(`<button class="ghost" data-a="export">Exporter</button><label class="btn" style="border-color:transparent;background:transparent;color:var(--muted)">Importer<input type="file" id="imp" accept="application/json,.json" hidden></label><button class="primary" data-a="newbook">Ajouter un document</button>`)}
+  ${S.loadErr ? `<div class="banner err">${esc(S.loadErr)}</div>` : ""}
+  ${S.showNewBook ? `<section class="panel"><h2>Nouveau document</h2><p class="muted small">Un livre, un article, un cours, un rapport, des notes : tout texte à résumer.</p>${bookForm()}<div class="row"><button class="primary" data-a="createbook">Créer</button><button class="ghost" data-a="cancelbook">Annuler</button></div></section>` : ""}
+  ${!books.length && !S.showNewBook ? `<div class="empty"><h2>Votre bibliothèque est vide</h2><p class="muted">Ajoutez un livre, un article, un cours ou n'importe quel texte, puis photographiez ses pages ou collez le texte. L'application lit les pages elle-même, sur votre appareil, les range par chapitre ou par partie et résume une page, une partie ou le document entier : points importants, dates, noms, moments marquants et références, avec le numéro de page où les retrouver.</p><p class="muted small">Le livre ci-dessous est un exemple ; il disparaît dès que vous ajoutez votre premier document.</p><div><button class="primary" data-a="newbook">Ajouter mon premier document</button></div></div>` : ""}
+  <div class="shelf">${shown.map(card).join("")}</div>`;
+}
+
+function vBook() {
+  const b = book(); if (!b) { S.view = "library"; return vLibrary(); }
+  const w = W(b), chs = chapters(b), all = pagesOf(b.id);
+  const orphan = all.filter(p => !chs.some(c => c.id === p.chapterId));
+  const toc = chs.map((c, i) => `<button class="toc-item ${S.sel === c.id ? "on" : ""}" data-a="sel" data-id="${c.id}"><span class="toc-num">${i + 1}</span><span class="toc-title">${esc(c.title)}</span><span class="toc-pages">${range(chPages(b.id, c.id))}</span></button>`).join("");
+  const right = `<button class="ghost" data-a="lib">← Bibliothèque</button>${!b.example ? `<button class="primary" data-a="toggleadd">${S.addOpen ? "Fermer l'ajout" : "Ajouter des pages"}</button>` : ""}`;
+  return `${topbar(right)}
+  <div class="layout">
+    <nav class="rail" aria-label="${w.toc}">
+      <span class="label" style="padding:4px 8px">${w.toc}</span>
+      <button class="toc-item ${S.sel === "overview" ? "on" : ""}" data-a="sel" data-id="overview"><span class="toc-num">◆</span><span class="toc-title">Vue d'ensemble</span><span class="toc-pages">${all.length} p.</span></button>
+      ${toc || `<p class="muted small" style="padding:8px">Aucun${isBook(b) ? "" : "e"} ${w.one} pour l'instant. ${isBook(b) ? "Ils se créent" : "Elles se créent"} quand vous ajoutez des pages.</p>`}
+      ${orphan.length ? `<button class="toc-item ${S.sel === "_none" ? "on" : ""}" data-a="sel" data-id="_none"><span class="toc-num">–</span><span class="toc-title">${w.none}</span><span class="toc-pages">${orphan.length} p.</span></button>` : ""}
+      ${!b.example ? `<div class="row" style="padding:6px 4px 0"><input id="newch" placeholder="${w.New}…" class="grow" style="flex:1"><button data-a="addch" title="Ajouter">+</button></div>` : ""}
+    </nav>
+    <div class="main">
+      ${S.addOpen && !b.example ? vAdd(b) : ""}
+      ${S.sel === "overview" ? vOverview(b) : vChapter(b, S.sel === "_none" ? { id: "_none", title: "Pages " + w.none.toLowerCase(), virtual: true } : chs.find(c => c.id === S.sel))}
+    </div>
+  </div>`;
+}
+
+function chapterSelect(b, id) {
+  const w = W(b);
+  return `<label class="field"><span>Ranger dans</span><select id="${id}">
+    <option value="auto">Détecter automatiquement</option>
+    ${chapters(b).map(c => `<option value="${c.id}" ${S.sel === c.id ? "selected" : ""}>${esc(c.title)}</option>`).join("")}
+    <option value="new">${w.New}…</option></select></label>`;
+}
+
+function vAdd(b) {
+  const waiting = S.staged.filter(q => q.status === "waiting").length;
+  const photos = `
+    <div class="drop" id="drop"><h3>Photographiez ou déposez les pages</h3>
+      <p class="muted small">Les photos sont lues sur votre appareil, rien n'est envoyé à une IA. Langue(s) de lecture : <b>${esc(bookLangs(b).map(langName).join(", "))}</b>. Page bien à plat, bien éclairée, texte net.</p>
+      <div class="row"><label class="btn primary">Prendre une photo<input type="file" id="cam" accept="image/*" capture="environment" hidden></label>
+      <label class="btn">Choisir des photos<input type="file" id="files" accept="image/*" multiple hidden></label></div>
+      <p class="muted small">« Prendre une photo » ouvre l'appareil photo, une page à la fois. « Choisir des photos » ouvre la galerie (plusieurs à la fois).</p></div>
+    ${S.staged.length ? `<div class="queue" id="queue">${S.staged.map(qItem).join("")}</div>` : ""}
+    ${S.running ? `<div class="field"><span id="ocr-status">${esc(S.ocrStatus || "Préparation…")}</span><div class="progress"><i id="ocr-bar" style="width:${Math.round((S.ocrPct || 0) * 100)}%"></i></div></div>` : ""}
+    <div class="formgrid">${chapterSelect(b, "add-ch")}
+      <label class="field"><span>Nom (si ${W(b).New.toLowerCase()})</span><input id="add-newch" placeholder="${W(b).New}"></label>
+      <label class="field"><span>Page de départ (si non imprimée)</span><input id="add-start" inputmode="numeric" placeholder="Ex. 45"></label></div>
+    <div class="row">
+      <button class="primary" data-a="runphotos" ${!waiting || S.running ? "disabled" : ""}>Lire ${waiting || ""} photo${waiting > 1 ? "s" : ""}</button>
+      ${S.running ? `<button data-a="stop">Arrêter après cette page</button>` : ""}
+      ${S.staged.some(q => q.status === "error") && !S.running ? `<button data-a="retry">Réessayer les erreurs</button>` : ""}
+      ${S.staged.length && !S.running ? `<button class="ghost" data-a="clearq">Vider la liste</button>` : ""}
+    </div>`;
+  const text = `
+    <label class="field"><span>Texte de la ou des pages</span><textarea id="paste" placeholder="Collez ici le texte copié (une page, plusieurs pages ou un chapitre entier)…"></textarea></label>
+    <div class="formgrid">${chapterSelect(b, "paste-ch")}
+      <label class="field"><span>Nom (si ${W(b).New.toLowerCase()})</span><input id="paste-newch" placeholder="${W(b).New}"></label>
+      <label class="field"><span>Page(s)</span><input id="paste-page" placeholder="Ex. 112 ou 112-118"></label></div>
+    <div class="row"><button class="primary" data-a="runtext">Ajouter le texte</button></div>`;
+  return `<section class="panel"><h2>Ajouter des pages</h2>
+    <div class="tabs"><button class="tab ${S.addTab === "photos" ? "on" : ""}" data-a="tab" data-id="photos">Photos</button><button class="tab ${S.addTab === "texte" ? "on" : ""}" data-a="tab" data-id="texte">Coller du texte</button></div>
+    ${S.addTab === "photos" ? photos : text}</section>`;
+}
+function qItem(q) {
+  const lab = { waiting: "En attente", working: "Lecture…", done: q.page ? "p. " + q.page : "Rangée", error: "Erreur" }[q.status];
+  return `<div class="qitem"><img src="${q.url}" alt="${esc(q.name)}"><div class="st"><span class="st-${q.status}">${esc(lab)}</span>${q.status !== "working" && !S.running ? `<button class="ghost small" style="padding:0 4px" data-a="unstage" data-id="${q.id}" aria-label="Retirer">×</button>` : ""}</div>${q.err ? `<div class="qerr">${esc(q.err)}</div>` : ""}</div>`;
+}
+
+const chips = (pages = []) => arr(pages).length ? `<span class="chips">${arr(pages).map(p => `<button class="chip" data-a="goto" data-id="${esc(p)}">p. ${esc(p)}</button>`).join("")}</span>` : "";
+const paras = t => String(t || "").split(/\n\s*\n/).filter(Boolean).map(x => `<p>${esc(x)}</p>`).join("");
+
+function vSummary(s, opts = {}) {
+  const box = (title, items, fn) => arr(items).length ? `<div class="sbox"><span class="label">${title}</span><ul>${arr(items).map(fn).join("")}</ul></div>` : "";
+  if (!s.overview && !s.key_points.length) return `<p class="muted">Pas assez de texte lisible pour un résumé. Vérifiez le texte des pages (bouton « Corriger le texte »).</p>`;
+  return `<div class="summary">
+    <div class="overview">${paras(s.overview)}</div>
+    <div class="sgrid">
+      ${box("Points importants", s.key_points, x => `<li><span class="hl">${esc(x.point)}</span>${opts.noPages ? "" : chips(x.pages)}</li>`)}
+      ${box("Dates", s.dates, x => `<li><span class="date">${esc(x.date)}</span><span>${esc(x.event)}</span>${opts.noPages ? "" : chips(x.pages)}</li>`)}
+      ${box("Moments marquants", s.moments, x => `<li><span>${esc(x.title)}</span>${opts.noPages ? "" : chips(x.pages)}</li>`)}
+      ${box("Noms cités (personnes, lieux)", s.people, x => `<li><b>${esc(x.name)}</b><span class="muted small">${esc(x.role)}</span>${opts.noPages ? "" : chips(x.pages)}</li>`)}
+      ${box("Références citées", s.references, x => `<li><span class="ref">${x.marker ? `<sup>${esc(x.marker)}</sup> ` : ""}${esc(x.citation)}</span>${opts.noPages ? "" : chips(x.pages)}</li>`)}
+      ${box(opts.partsLabel || "Chapitres", s.chapters, x => `<li><b>${esc(x.chapter)}</b><span class="muted">${esc(x.line)}</span></li>`)}
+    </div>
+    ${arr(s.themes).length ? `<div class="sbox"><span class="label">Mots qui reviennent</span><div class="themes">${arr(s.themes).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div></div>` : ""}
+    ${opts.noNote ? "" : `<p class="muted small">Résumé construit à partir des phrases du texte lui-même (sans IA), recalculé à chaque nouvelle page.</p>`}
+  </div>`;
+}
+
+function vOverview(b) {
+  const w = W(b), all = sortPages(pagesOf(b.id));
+  const meta = [["Type", typeOf(b)[1]], ["Auteur", b.author], ["Année", b.year], ["Source", b.publisher], ["Sujet", b.genre], ["Langue", bookLangs(b).map(langName).join(", ")]].filter(x => x[1]).map(([k, v]) => `<span>${k} <b>${esc(v)}</b></span>`).join("");
+  let sum = null;
+  if (all.length) {
+    const chs = chapters(b);
+    const ordered = chs.flatMap(c => chPages(b.id, c.id)).concat(all.filter(p => !chs.some(c => c.id === p.chapterId)));
+    const l = LEN[S.len];
+    sum = analyseCached("book:" + b.id, ordered, lenOpts(b, { overview: Math.max(l.overview, Math.min(l.overview * 2, chs.length * 2 + 2)) }));
+    sum = { ...sum, chapters: chs.length > 1 ? chs.map(c => { const ps = chPages(b.id, c.id); if (!ps.length) return null; const a = analyseCached("ch:" + c.id, ps, lenOpts(b)); return { chapter: c.title, line: a.key_points[0]?.point || "" }; }).filter(Boolean) : [] };
+  }
+  return `<section class="panel">
+    ${S.editBook ? `<h2>Informations</h2>${bookForm(b)}<div class="row"><button class="primary" data-a="savebook">Enregistrer</button><button class="ghost" data-a="canceledit">Annuler</button></div>` :
+    `<div class="bookhead">${b.example ? `<span><span class="tag">Exemple</span></span>` : ""}<div class="meta">${meta}</div>${b.notes ? `<p class="muted" style="max-width:68ch">${esc(b.notes)}</p>` : ""}</div>
+    ${!b.example ? `<div class="row"><button class="ghost" data-a="editbook">Modifier les informations</button>${S.confirmDel === "book" ? `<button class="danger" data-a="delbook">Confirmer : supprimer le document et ses ${all.length} pages</button><button class="ghost" data-a="nodel">Annuler</button>` : `<button class="ghost danger" data-a="askdelbook">Supprimer le document</button>`}</div>` : ""}`}
+  </section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Résumé de tout le document</h2>${sum ? lenCtl() : ""}</div>
+    ${sum ? vSummary(sum, { partsLabel: isBook(b) ? "Chapitres" : "Parties" }) : `<p class="muted">Ajoutez des pages ou collez un texte pour commencer.</p>`}
+  </section>`;
+}
+
+function vChapter(b, c) {
+  if (!c) { S.sel = "overview"; return vOverview(b); }
+  const w = W(b), chs = chapters(b);
+  const ps = c.virtual ? sortPages(pagesOf(b.id).filter(p => !chs.some(x => x.id === p.chapterId))) : chPages(b.id, c.id);
+  const sum = ps.length ? analyseCached("ch:" + c.id, ps, lenOpts(b)) : null;
+  const others = chs.filter(x => x.id !== c.id);
+  const pcard = p => {
+    const a = analyseCached("p:" + p.id, [p], { lang: anaLang(b), overview: 1, points: 3 });
+    const editing = S.editing === p.id, open = S.pageSum[p.id];
+    return `<article class="pagecard" id="pg-${esc(p.id)}">
+    <div class="row" style="justify-content:space-between"><span class="pno">${p.page ? "Page " + esc(p.page) : "Page sans numéro"}</span><span class="muted small">${p.source === "photo" ? "photo" : "texte collé"}</span></div>
+    ${editing ? `<div class="formgrid"><label class="field"><span>Numéro de page</span><input id="ed-page-${p.id}" value="${esc(p.page ?? "")}"></label></div>
+      <label class="field"><span>Texte de la page</span><textarea id="ed-text-${p.id}" style="min-height:260px">${esc(p.text)}</textarea></label>
+      <div class="row"><button class="primary" data-a="saveedit" data-id="${p.id}">Enregistrer</button><button class="ghost" data-a="canceledit2">Annuler</button></div>` : open ? `
+    <div class="row" style="justify-content:space-between"><span class="label">Résumé de toute la page</span>${lenCtl()}</div>
+    ${vSummary(analyseCached("ps:" + p.id, [p], lenOpts(b)), { noPages: true, noNote: true })}
+    <div class="row"><button class="ghost small" data-a="pagesum" data-id="${p.id}">Fermer le résumé</button></div>` : `
+    ${a.key_points.length ? `<ul>${a.key_points.map(k => `<li>${esc(k.point)}</li>`).join("")}</ul>` : `<p class="muted small">Aucune phrase lisible repérée sur cette page.</p>`}
+    ${a.dates.length ? `<div class="small">${a.dates.map(d => `<span class="date">${esc(d.date)}</span>`).join(" · ")}</div>` : ""}
+    ${a.references.length ? `<div class="small"><span class="label">Références</span>${a.references.map(r => `<div class="ref">${r.marker ? `<sup>${esc(r.marker)}</sup> ` : ""}${esc(r.citation)}</div>`).join("")}</div>` : ""}`}
+    ${!editing && p.text ? `<details><summary>Voir le texte de la page</summary><div class="transcript">${esc(p.text)}</div></details>` : ""}
+    ${!editing ? `<div class="row small">${!open ? `<button class="small" data-a="pagesum" data-id="${p.id}">Résumer cette page</button>` : ""}${!b.example ? `<button class="ghost small" data-a="edit" data-id="${p.id}">Corriger le texte</button><label class="muted small" for="mv-${p.id}">Déplacer vers</label><select id="mv-${p.id}" data-a="move" data-id="${p.id}" style="width:auto;max-width:100%"><option value="">—</option>${others.map(o => `<option value="${o.id}">${esc(o.title)}</option>`).join("")}</select><button class="ghost danger small" data-a="delpage" data-id="${p.id}">${S.confirmDel === p.id ? "Confirmer la suppression" : "Supprimer"}</button>` : ""}</div>` : ""}
+  </article>`;
+  };
+  const ans = S.answerFor === c.id && S.answer;
+  return `<section class="panel">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><div class="bookhead"><span class="label">${c.virtual ? "" : w.one[0].toUpperCase() + w.one.slice(1) + " " + (chs.indexOf(c) + 1) + " · "}${range(ps) || "aucune page"}</span><h2>${esc(c.title)}</h2></div>
+      ${!b.example && !c.virtual ? `<div class="row"><button class="ghost" data-a="renamech">Renommer</button>${S.confirmDel === c.id ? `<button class="danger" data-a="delch">Confirmer (les pages sont gardées)</button>` : `<button class="ghost danger" data-a="askdelch">Supprimer</button>`}</div>` : ""}</div>
+    ${S.renaming === c.id ? `<div class="row"><input id="rename" class="grow" style="flex:1" value="${esc(c.title)}"><button class="primary" data-a="saverename">OK</button></div>` : ""}
+  </section>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Résumé de ${c.virtual ? "ces pages" : w.all}</h2>${sum ? lenCtl() : ""}</div>
+    ${sum ? vSummary(sum) : `<p class="muted">Pas encore de pages ici.</p>`}
+  </section>
+  ${ps.length ? `<section class="panel"><h2>Chercher dans ${c.virtual ? "ces pages" : w.this}</h2>
+    <div class="row"><input id="ask" class="grow" style="flex:1" placeholder="Une question ou des mots-clés"><button class="primary" data-a="ask">Chercher</button></div>
+    ${ans ? (ans.length ? `<div class="answer"><span class="muted small">Passages qui répondent le mieux :</span>${ans.map(x => `<blockquote><span>${esc(x.s)}</span>${chips([x.page])}</blockquote>`).join("")}</div>` : `<p class="muted">Aucun passage ne correspond. Essayez d'autres mots.</p>`) : ""}
+  </section>` : ""}
+  <section class="pages"><h2>Pages <span class="muted small">(${ps.length})</span></h2>${ps.map(pcard).join("") || `<p class="muted">Aucune page.</p>`}</section>`;
+}
+
+/* ---------- photos ---------- */
+function bindDrop() {
+  const d = $("#drop"); if (!d) return;
+  d.ondragover = e => { e.preventDefault(); d.classList.add("over"); };
+  d.ondragleave = () => d.classList.remove("over");
+  d.ondrop = e => { e.preventDefault(); d.classList.remove("over"); stage(e.dataTransfer.files); };
+  for (const f of [$("#files"), $("#cam")]) if (f) f.onchange = () => { stage(f.files); f.value = ""; };
+}
+function stage(files) {
+  const imgs = [...files].filter(f => !f.type || f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
+  if (imgs.length < files.length) toast("Certains fichiers ne sont pas des images et ont été ignorés.");
+  if (imgs.length > 1) imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  for (const f of imgs) S.staged.push({ id: uid("q"), file: f, name: f.name, url: URL.createObjectURL(f), status: "waiting" });
+  render();
+}
+function paintProgress() {
+  const s = $("#ocr-status"), b = $("#ocr-bar");
+  if (s) s.textContent = S.ocrStatus || ""; if (b) b.style.width = Math.round((S.ocrPct || 0) * 100) + "%";
+}
+
+async function ensureChapter(b, sel, newName, heading, fallbackId) {
+  const mk = async title => { const c = { id: uid("c"), title, order: b.chapters.length }; b.chapters.push(c); await saveBookSafe(b); return c.id; };
+  if (sel === "new") { const name = newName || "Chapitre " + (b.chapters.length + 1); const ex = b.chapters.find(c => norm(c.title) === norm(name)); return ex ? ex.id : mk(name); }
+  if (sel !== "auto") return sel;
+  if (heading) {
+    const nh = norm(heading);
+    const ex = b.chapters.find(c => { const nc = norm(c.title); return nc === nh || nc.startsWith(nh) || nh.startsWith(nc); });
+    return ex ? ex.id : mk(heading);
+  }
+  if (fallbackId) return fallbackId;
+  const last = chapters(b).at(-1); if (last) return last.id;
+  return mk(W(b).first);
+}
+
+async function runPhotos() {
+  const b = book(); if (!b) return;
+  const sel = $("#add-ch").value, newName = $("#add-newch").value.trim();
+  const start = parseInt($("#add-start").value, 10);
+  if (sel === "new" && !newName) { toast("Donnez un nom à la nouvelle section."); return; }
+  S.running = true; S.stopReq = false; S.ocrStatus = "Chargement du moteur de lecture (la première fois, quelques secondes)…"; S.ocrPct = 0; render();
+  let worker;
+  OCR.onProgress = m => {
+    if (m.status === "recognizing text") { S.ocrPct = m.progress; S.ocrStatus = `Lecture de la page… ${Math.round(m.progress * 100)} %`; }
+    else if (/load|initializ/.test(m.status)) { S.ocrStatus = "Chargement du moteur de lecture…"; S.ocrPct = m.progress || 0; }
+    paintProgress();
+  };
+  try { worker = await OCR.get(bookLangs(b)); }
+  catch (e) { S.running = false; const msg = e?.msg || "Le moteur de lecture n'a pas démarré."; S.staged.forEach(q => { if (q.status === "waiting") { q.status = "error"; q.err = msg; } }); toast(msg); render(); return; }
+  let current = sel === "auto" ? null : await ensureChapter(b, sel, newName);
+  let idx = 0, ok = 0;
+  const todo = S.staged.filter(q => q.status === "waiting");
+  for (const q of todo) {
+    if (S.stopReq) break;
+    q.status = "working"; q.err = ""; S.ocrPct = 0; S.ocrStatus = `Photo ${idx + 1} sur ${todo.length} : préparation…`; render();
+    try {
+      const canvas = await loadImage(q.file);
+      S.ocrStatus = `Photo ${idx + 1} sur ${todo.length} : lecture…`; paintProgress();
+      const { data } = await worker.recognize(canvas, { rotateAuto: true });
+      const raw = String(data?.text || "").trim();
+      const letters = (raw.match(/\p{L}/gu) || []).length;
+      if (letters < 20) throw { msg: `Presque aucun texte reconnu${data?.confidence != null ? " (confiance " + Math.round(data.confidence) + " %)" : ""}. Reprenez la photo plus près, bien à plat et éclairée, ou vérifiez la langue du livre.` };
+      const pp = Analyse.parsePage(raw);
+      if (sel === "auto") current = await ensureChapter(b, "auto", "", pp.heading, current);
+      const page = pp.page || (Number.isFinite(start) ? String(start + idx) : null);
+      const p = { id: uid("p"), chapterId: current, page, text: raw, source: "photo", addedAt: Date.now() };
+      await Store.savePage(b.id, p);
+      (S.pages[b.id] = S.pages[b.id] || []).push(p);
+      q.status = "done"; q.page = page; ok++;
+      if (data?.confidence != null && data.confidence < 55) q.err = `Lecture incertaine (${Math.round(data.confidence)} %) : vérifiez le texte.`;
+    } catch (e) {
+      q.status = "error"; q.err = e?.msg || ("Lecture impossible : " + (e?.message || e?.code || String(e)));
+    }
+    idx++; render();
+  }
+  S.running = false; OCR.onProgress = null;
+  if (ok) { toast(ok + " page(s) ajoutée(s)."); if (current && S.sel === "overview") S.sel = current; }
+  b.pageCount = (S.pages[b.id] || []).length; saveBookSafe(b);
+  render();
+}
+
+async function runText() {
+  const b = book(); if (!b) return;
+  const txt = $("#paste").value.trim(); if (!txt) { toast("Collez d'abord du texte."); return; }
+  const sel = $("#paste-ch").value, newName = $("#paste-newch").value.trim(), pg = $("#paste-page").value.trim();
+  if (sel === "new" && !newName) { toast("Donnez un nom à la nouvelle section."); return; }
+  const pp = Analyse.parsePage(txt);
+  const cid = await ensureChapter(b, sel, newName, pp.heading, null);
+  const p = { id: uid("p"), chapterId: cid, page: pg || pp.page || null, text: txt, source: "texte", addedAt: Date.now() };
+  try { await Store.savePage(b.id, p); } catch { toast("Enregistrement impossible, réessayez."); return; }
+  (S.pages[b.id] = S.pages[b.id] || []).push(p);
+  b.pageCount = S.pages[b.id].length; saveBookSafe(b);
+  S.sel = cid; S.resetForms = true; toast("Texte ajouté et rangé."); render();
+}
+
+function doSearch() {
+  const b = book(), q = ($("#ask")?.value || "").trim(); if (!q || !b) return;
+  const chs = chapters(b);
+  const ps = S.sel === "_none" ? pagesOf(b.id).filter(p => !chs.some(x => x.id === p.chapterId)) : chPages(b.id, S.sel);
+  S.answer = Analyse.search(q, ps, anaLang(b)); S.answerFor = S.sel; render();
+}
+
+function gotoPage(pg) {
+  const b = book(); if (!b) return;
+  const all = sortPages(pagesOf(b.id));
+  const p = all.find(x => String(x.page) === String(pg)) || all.find(x => pnum(x.page) === pnum(pg));
+  if (!p) { toast("La page " + pg + " n'est pas dans le carnet."); return; }
+  const chs = chapters(b), target = chs.some(c => c.id === p.chapterId) ? p.chapterId : "_none";
+  if (S.sel !== target) { S.sel = target; render(); }
+  const el = document.getElementById("pg-" + p.id); if (!el) return;
+  el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600);
+}
+
+/* ---------- actions ---------- */
+function readBookForm() {
+  const v = id => ($("#" + id)?.value || "").trim();
+  const langs = [...app.querySelectorAll('input[name="bf-lang"]:checked')].map(i => i.value);
+  return { type: v("bf-type") || "livre", title: v("bf-title"), author: v("bf-author"), year: v("bf-year"), publisher: v("bf-publisher"), genre: v("bf-genre"), notes: v("bf-notes"), langs: langs.length ? langs : ["fra"] };
+}
+async function saveBookSafe(b) { try { await Store.saveBook(b); return true; } catch (e) { toast("Enregistrement impossible : " + (e?.code === "quota_exceeded" ? "espace plein." : "réessayez.")); return false; } }
+
+async function openBook(id) {
+  S.bookId = id; S.view = "book"; S.sel = "overview"; S.addOpen = false; S.editBook = false; S.confirmDel = null; S.answer = null; S.staged = []; S.editing = null;
+  if (id !== EX_ID && !S.pages[id]) {
+    render();
+    try { S.pages[id] = await withTimeout(Store.listPages(id), 12000); }
+    catch { S.pages[id] = []; toast("Les pages n'ont pas pu être chargées. Vérifiez la connexion puis rouvrez le livre."); }
+  }
+  if (id !== EX_ID && !S.pages[id].length) { S.addOpen = true; S.addTab = isBook(book()) ? "photos" : "texte"; }
+  render(); window.scrollTo(0, 0);
+}
+
+app.addEventListener("click", async e => {
+  const t = e.target.closest("[data-a]"); if (!t || t.tagName === "SELECT") return;
+  const a = t.dataset.a, id = t.dataset.id, b = book();
+  if (!["delpage", "delbook", "delch", "askdelbook", "askdelch"].includes(a)) S.confirmDel = null;
+  switch (a) {
+    case "newbook": S.showNewBook = true; S.view = "library"; render(); $("#bf-title")?.focus(); break;
+    case "cancelbook": S.showNewBook = false; S.resetForms = true; render(); break;
+    case "createbook": {
+      const f = readBookForm(); if (!f.title) { toast("Le titre est obligatoire."); return; }
+      const nb = { id: uid("b"), ...f, chapters: [], createdAt: Date.now(), pageCount: 0 };
+      if (!(await saveBookSafe(nb))) return;
+      S.books.push(nb); S.pages[nb.id] = []; S.showNewBook = false; S.resetForms = true;
+      await openBook(nb.id); break;
+    }
+    case "open": openBook(id); break;
+    case "lib": S.view = "library"; S.bookId = null; render(); break;
+    case "sel": S.sel = id; S.renaming = null; S.editing = null; render(); window.scrollTo({ top: 0 }); break;
+    case "toggleadd": S.addOpen = !S.addOpen; render(); break;
+    case "tab": S.addTab = id; render(); break;
+    case "unstage": S.staged = S.staged.filter(q => q.id !== id); render(); break;
+    case "clearq": S.staged.forEach(q => URL.revokeObjectURL(q.url)); S.staged = []; render(); break;
+    case "retry": S.staged.forEach(q => { if (q.status === "error") { q.status = "waiting"; q.err = ""; } }); render(); break;
+    case "runphotos": runPhotos(); break;
+    case "stop": S.stopReq = true; S.ocrStatus = "Arrêt après la page en cours…"; paintProgress(); break;
+    case "runtext": runText(); break;
+    case "addch": {
+      const name = ($("#newch")?.value || "").trim(); if (!name) { $("#newch")?.focus(); return; }
+      const c = { id: uid("c"), title: name, order: b.chapters.length }; b.chapters.push(c);
+      if (await saveBookSafe(b)) { $("#newch").value = ""; S.sel = c.id; render(); } break;
+    }
+    case "renamech": S.renaming = S.sel; render(); $("#rename")?.focus(); break;
+    case "saverename": {
+      const c = b.chapters.find(x => x.id === S.sel), v = ($("#rename")?.value || "").trim();
+      if (c && v) { c.title = v; await saveBookSafe(b); } S.renaming = null; render(); break;
+    }
+    case "askdelch": S.confirmDel = S.sel; render(); break;
+    case "delch": {
+      b.chapters = b.chapters.filter(c => c.id !== S.sel); chapters(b).forEach((c, i) => c.order = i);
+      await saveBookSafe(b); S.sel = "overview"; toast(W(b).one[0].toUpperCase() + W(b).one.slice(1) + " supprimé" + (isBook(b) ? "" : "e") + ". Ses pages sont gardées dans « " + W(b).none + " »."); render(); break;
+    }
+    case "delpage": {
+      if (S.confirmDel !== id) { S.confirmDel = id; render(); return; }
+      try { await Store.deletePage(b.id, id); S.pages[b.id] = S.pages[b.id].filter(p => p.id !== id); b.pageCount = S.pages[b.id].length; saveBookSafe(b); toast("Page supprimée."); } catch { toast("Suppression impossible, réessayez."); }
+      S.confirmDel = null; render(); break;
+    }
+    case "edit": S.editing = id; render(); break;
+    case "len": S.len = id; try { localStorage.setItem("carnet-len", id); } catch {} render(); break;
+    case "pagesum": S.pageSum[id] = !S.pageSum[id]; render(); break;
+    case "canceledit2": S.editing = null; render(); break;
+    case "saveedit": {
+      const p = pagesOf(b.id).find(x => x.id === id); if (!p) return;
+      p.text = $("#ed-text-" + id).value; p.page = $("#ed-page-" + id).value.trim() || null;
+      try { await Store.savePage(b.id, p); toast("Page corrigée."); } catch { toast("Enregistrement impossible, réessayez."); }
+      S.editing = null; render(); break;
+    }
+    case "editbook": S.editBook = true; render(); break;
+    case "canceledit": S.editBook = false; S.resetForms = true; render(); break;
+    case "savebook": { const f = readBookForm(); if (!f.title) { toast("Le titre est obligatoire."); return; } Object.assign(b, f); if (await saveBookSafe(b)) { S.editBook = false; S.resetForms = true; toast("Informations enregistrées."); } render(); break; }
+    case "askdelbook": S.confirmDel = "book"; render(); break;
+    case "nodel": S.confirmDel = null; render(); break;
+    case "delbook": {
+      try { await Store.deleteBook(b, pagesOf(b.id)); S.books = S.books.filter(x => x.id !== b.id); S.view = "library"; S.bookId = null; toast("Document supprimé."); } catch { toast("Suppression impossible, réessayez."); }
+      S.confirmDel = null; render(); break;
+    }
+    case "ask": doSearch(); break;
+    case "goto": gotoPage(id); break;
+    case "export": exportAll(); break;
+  }
+});
+
+/* ---------- export / import (passer ses documents d'un appareil à l'autre) ---------- */
+async function exportAll() {
+  if (!S.books.length) { toast("Aucun document à exporter."); return; }
+  const docs = [];
+  for (const b of S.books) {
+    if (!S.pages[b.id]) { try { S.pages[b.id] = await Store.listPages(b.id); } catch { S.pages[b.id] = []; } }
+    docs.push({ ...b, pages: S.pages[b.id] });
+  }
+  const data = JSON.stringify({ app: "carnet-de-lecture", version: 1, exportedAt: new Date().toISOString(), documents: docs });
+  const filename = "carnet-de-lecture-" + new Date().toISOString().slice(0, 10) + ".json";
+  const dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (dl) { try { const r = await dl.save({ filename, data }); if (r?.status === "saved") toast("Fichier enregistré."); } catch (e) { if (e?.code === "unavailable") toast("Export impossible dans cette vue."); } return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([data], { type: "application/json" })); a.download = filename;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast("Fichier téléchargé : " + filename);
+}
+async function importFile(file) {
+  let j; try { j = JSON.parse(await file.text()); } catch { toast("Ce fichier n'est pas un export du Carnet de lecture."); return; }
+  const docs = arr(j?.documents); if (j?.app !== "carnet-de-lecture" || !docs.length) { toast("Ce fichier n'est pas un export du Carnet de lecture."); return; }
+  let n = 0;
+  for (const d of docs) {
+    if (!d?.id || !d.title) continue;
+    const { pages, ...b } = d; b.chapters = arr(b.chapters); b.pageCount = arr(pages).length;
+    try {
+      await Store.saveBook(b);
+      for (const p of arr(pages)) if (p?.id) await Store.savePage(b.id, p);
+    } catch { toast("Import interrompu : espace plein ou connexion coupée."); break; }
+    const ex = S.books.find(x => x.id === b.id); if (ex) Object.assign(ex, b); else S.books.push(b);
+    const ids = new Set(arr(pages).map(p => p.id));
+    S.pages[b.id] = [...(S.pages[b.id] || []).filter(p => !ids.has(p.id)), ...arr(pages)];
+    n++;
+  }
+  if (n) toast(n + " document(s) importé(s).");
+  render();
+}
+
+app.addEventListener("change", async e => {
+  const t = e.target;
+  if (t.id === "imp" && t.files?.[0]) { const f = t.files[0]; t.value = ""; importFile(f); return; }
+  if (t.dataset?.a !== "move" || !t.value) return;
+  const b = book(), p = pagesOf(b.id).find(x => x.id === t.dataset.id); if (!p) return;
+  p.chapterId = t.value;
+  try { await Store.savePage(b.id, p); toast("Page déplacée."); } catch { toast("Déplacement impossible."); }
+  render();
+});
+app.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "ask") { e.preventDefault(); doSearch(); }
+  if (e.target.id === "newch") { e.preventDefault(); $('[data-a="addch"]')?.click(); }
+  if (e.target.id === "rename") { e.preventDefault(); $('[data-a="saverename"]')?.click(); }
+});
+
+/* ---------- boot ---------- */
+(async function boot() {
+  const use = n => (window.claude?.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
+  const [db, user] = await Promise.all([use("db"), use("user")]);
+  await Store.init(db, user);
+  try { S.books = await withTimeout(Store.listBooks(), 12000); }
+  catch { S.loadErr = "La bibliothèque n'a pas pu être chargée pour l'instant. Vérifiez la connexion puis rechargez la page."; S.books = []; }
+  S.books.forEach(b => { b.chapters = arr(b.chapters); });
+  S.ready = true; render();
+})();
+</script>
