@@ -383,13 +383,16 @@ const Analyse = (() => {
     const toks = s.split(/\s+/).filter(Boolean);
     if (toks.length < 4) return 0;
     let bad = 0, sw = 0;
+    let prevT = "";
     for (const t of toks) {
+      const lt = t.toLowerCase(); if (lt.length >= 2 && lt === prevT && /^\p{L}+$/u.test(lt)) bad++; prevT = lt;
       const w = t.replace(/^[«"“„'‘(\[¿¡]+|[»"”'’),.;:!?…\]·]+$/g, "");
       if (!w || /^\d+(?:[.,]\d+)*%?$/.test(w) || /^[—–-]$/.test(w)) continue;
       if (!/^[\p{L}][\p{L}\p{M}'’\-]*$/u.test(w)) { bad++; continue; }
       const n = norm(w);
       if (ALLSTOP.has(n)) { sw++; continue; }
-      if (n.length === 1) { bad += 0.6; continue; }
+      if (n.length === 1) { bad += 1; continue; }
+      if (n.length === 2 && !/^\p{Lu}{2}$/u.test(w)) { bad += 0.5; continue; }
       const v = (n.match(VOW) || []).length;
       if (n.length > 3 && v === 0) { bad++; continue; }
       if (n.length > 5 && v / n.length < 0.18) { bad += 0.7; continue; }
@@ -397,6 +400,7 @@ const Analyse = (() => {
       if (n.length > 22) { bad++; continue; }
     }
     const k = toks.length;
+    if (bad >= 2 && bad / k >= 0.05) return 0;
     return Math.max(0, 1 - 2.2 * bad / k) * Math.min(1, 0.35 + 3 * sw / k);
   }
   // Bibliographie, mentions légales, fragments issus d'une mauvaise coupure : ce n'est pas du contenu.
@@ -446,7 +450,7 @@ const Analyse = (() => {
     const a = analyse(pages, { lang: opts.lang });
     const oneRef = pages.length <= 1;
     const ref = pg => opts.noPages || oneRef || !pg || pg === "?" ? "" : ` (p. ${pg})`;
-    const its = a.items.map(it => ({ ...it, s: tidy(it.s) })).map(it => ({ ...it, q: quality(it.s) })).filter(it => it.q >= 0.45 && it.t.length >= 3 && !isRef(it.s) && !broken(it.s));
+    const its = a.items.map(it => ({ ...it, s: tidy(it.s) })).map(it => ({ ...it, q: quality(it.s) })).filter(it => it.q >= 0.55 && it.t.length >= 3 && !isRef(it.s) && !broken(it.s));
     its.forEach((it, i) => it.k = i);
     const N = its.length;
     if (!N) return null;
@@ -1177,8 +1181,59 @@ async function loadImage(file) {
   }
   const w = bmp.width, h = bmp.height, scale = Math.min(1, 2400 / Math.max(w, h));
   const c = document.createElement("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
-  const ctx = c.getContext("2d"); ctx.filter = "grayscale(1) contrast(1.15)"; ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  return c;
+  const ctx = c.getContext("2d"); ctx.filter = "grayscale(1)"; ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  try { return deskew(normalizeLight(c)); } catch (e) { console.warn("prétraitement", e); ctx.filter = "none"; return c; }
+}
+// Éclaire la page uniformément : on divise par le fond flou (ombres, doigts, reflets), puis on renforce le contraste
+function normalizeLight(src) {
+  const w = src.width, h = src.height;
+  const b = document.createElement("canvas"); b.width = w; b.height = h;
+  const bx = b.getContext("2d"); bx.filter = "blur(" + Math.max(12, Math.round(w / 38)) + "px)"; bx.drawImage(src, 0, 0);
+  const g = src.getContext("2d").getImageData(0, 0, w, h), d = g.data, e = bx.getImageData(0, 0, w, h).data;
+  for (let i = 0; i < d.length; i += 4) { const v = Math.min(1, d[i] / Math.max(1, e[i])); d[i] = d[i + 1] = d[i + 2] = 255 * v * v * v; }
+  const o = document.createElement("canvas"); o.width = w; o.height = h; o.getContext("2d").putImageData(g, 0, 0);
+  return o;
+}
+// Redresse les lignes de texte penchées (photo prise de biais) : on cherche l'angle où les lignes sont les plus nettes
+function deskew(src) {
+  const sc = Math.min(1, 700 / src.width), w = Math.round(src.width * sc), h = Math.round(src.height * sc);
+  const s = document.createElement("canvas"); s.width = w; s.height = h; s.getContext("2d").drawImage(src, 0, 0, w, h);
+  const d = s.getContext("2d").getImageData(0, 0, w, h).data, pts = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4] < 110) pts.push(x, y);
+  if (pts.length < 600) return src;
+  const score = a => { const cs = Math.cos(a), sn = Math.sin(a), hist = new Float32Array(h * 2 + 8); for (let i = 0; i < pts.length; i += 2) hist[Math.max(0, Math.min(hist.length - 1, Math.round(pts[i + 1] * cs - pts[i] * sn + h)))]++; let t = 0; for (const v of hist) t += v * v; return t; };
+  let best = 0, bs = score(0);
+  for (let deg = -8; deg <= 8; deg += 0.5) { const sc2 = score(deg * Math.PI / 180); if (sc2 > bs) { bs = sc2; best = deg; } }
+  const s0 = score(0);
+  if (Math.abs(best) < 0.4 || bs < s0 * 1.03) return src;
+  const a = best * Math.PI / 180, W = src.width, H = src.height;
+  const nw = Math.round(W * Math.cos(Math.abs(a)) + H * Math.sin(Math.abs(a))), nh = Math.round(H * Math.cos(Math.abs(a)) + W * Math.sin(Math.abs(a)));
+  const o = document.createElement("canvas"); o.width = nw; o.height = nh;
+  const x = o.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, nw, nh); x.translate(nw / 2, nh / 2); x.rotate(-a); x.drawImage(src, -W / 2, -H / 2);
+  return o;
+}
+
+// Texte de la photo, nettoyé : on écarte les mots douteux et ce qui dépasse de la page voisine (bord de la page de gauche, doigts, ombres)
+function ocrText(data) {
+  const raw = String(data?.text || "").trim();
+  try {
+    const paras = (data.paragraphs || []).map(p => (p.lines || []).filter(l => l.words && l.words.length && l.bbox));
+    const lines = paras.flat();
+    const good = lines.filter(l => l.words.length >= 4);
+    if (good.length < 4) return raw;
+    // colonne principale : on cherche un grand vide vertical (la marge entre deux pages) dans chaque moitié
+    const ws0 = lines.flatMap(l => l.words).filter(w => w.bbox);
+    const IW = Math.max(...ws0.map(w => w.bbox.x1)), x0s = ws0.map(w => w.bbox.x0), win = Math.max(16, IW * 0.015);
+    const dens = s => x0s.filter(x => x >= s - win && x < s + win).length;
+    // un « creux » dans la répartition des débuts de mots, avec un petit groupe de mots à sa gauche : c'est la page voisine
+    let L = 0, bestD = 1e9;
+    for (let s = 0.08 * IW; s <= 0.4 * IW; s += win / 2) { const left = x0s.filter(x => x < s - win).length, d = dens(s); if (left >= 8 && left <= 0.4 * x0s.length && d <= 2 && d <= bestD) { bestD = d; L = s; } }
+    const R = IW, W = Math.max(1, R - L), mg = 0;
+    const keep = w => w.bbox && w.confidence >= 35 && w.bbox.x0 >= L - 12 && /[\p{L}\p{N}]/u.test(w.text);
+    const out = paras.map(ls => ls.map(l => l.words.filter(keep).map(w => w.text).join(" ")).filter(t => t.trim()).join("\n")).filter(t => t.trim()).join("\n\n");
+    const lt = s => (s.match(/\p{L}/gu) || []).length;
+    return lt(out) >= 0.35 * lt(raw) && lt(out) >= 40 ? out : raw;
+  } catch { return raw; }
 }
 
 /* ---------- state ---------- */
@@ -1899,7 +1954,7 @@ async function runPhotos() {
         const again = (await worker.recognize(canvas, { rotateAuto: true })).data;
         if ((again?.confidence ?? 0) >= (data?.confidence ?? 0)) data = again;
       }
-      const raw = String(data?.text || "").trim();
+      const raw = ocrText(data);
       const letters = (raw.match(/\p{L}/gu) || []).length;
       if (letters < 20) throw { msg: `Presque aucun texte reconnu${data?.confidence != null ? " (confiance " + Math.round(data.confidence) + " %)" : ""}. Reprenez la photo plus près, bien à plat et éclairée, ou vérifiez la langue du livre.` };
       const pp = Analyse.parsePage(raw);
@@ -1909,7 +1964,7 @@ async function runPhotos() {
       await Store.savePage(b.id, p);
       (S.pages[b.id] = S.pages[b.id] || []).push(p);
       q.status = "done"; q.page = page; ok++;
-      if (data?.confidence != null && data.confidence < 55) q.err = `Lecture incertaine (${Math.round(data.confidence)} %) : vérifiez le texte.`;
+      if (data?.confidence != null && data.confidence < 80) q.err = `Lecture ${data.confidence < 55 ? "incertaine" : "moyenne"} (${Math.round(data.confidence)} %) : vérifiez le texte. Une photo bien à plat, de face et sans ombre donne de meilleurs résumés.`;
     } catch (e) {
       q.status = "error"; q.err = e?.msg || ("Lecture impossible : " + (e?.message || e?.code || String(e)));
     }
