@@ -817,6 +817,32 @@ const Analyse = (() => {
         { const first = n.split(/\s+/)[0]; if (n.includes(" ") && first.length >= 6 && /^\p{Lu}/u.test(first) && !e.keys.includes(first) && !/^(?:Saint|Sainte|Pierre|Charles|Louis|Marie)$/.test(first)) e.keys.push(first); }
         if (last.length >= 4 && !lowAll.has(last.toLowerCase()) && !e.keys.includes(last) && !/\s(?:de|du|des|of|von|der|di|del|della|d')\s/i.test(n)) e.keys.push(last);
       }
+      const DPH = new RegExp("(?:\\b(?:in|en|im|nel|nell'|vers|dès|depuis|since|around|by|bis|im Jahr|el año|en el año|l'an|le|la|au|on|the|el|il|der|am|den)\\s+)?(?:(?:\\d{1,2}(?:er|st|nd|rd|th)?)\\s+)?(?:(?:" + MONTHS + ")\\s+)?(?:of\\s+)?(?:\\d{1,2}\\s*,?\\s+)?", "i");
+      // Phrase -> « 1439 : le litige est porté devant le concile de Bâle »
+      const eventText = (sn, y) => {
+        let t = sn.replace(/\s*\((?![^()]*\d)[^()]{0,120}\)/g, "").replace(/\s+/g, " ").trim();
+        const i = t.indexOf(y);
+        // formule de date en tête de phrase : « In 1439, » « Le 17 juin 1789, » « Between 1839 and 1847, »
+        const head = new RegExp("^(?:(?:between|entre|from|de|dès|vers|around|about|d'ici)\\s+)?(?:(?:in|en|im|nel|le|la|au|on|the|el|il|der|am|den|um)\\s+)?(?:\\d{1,2}(?:er|st|nd|rd|th)?\\s+)?(?:(?:" + MONTHS + ")\\s+)?(?:\\d{1,2}\\s*,\\s*)?" + y + "(?:\\s*[-–]\\s*\\d{2,4})?\\s*,?\\s*", "i");
+        let body;
+        if (i >= 0 && head.test(t) && t.replace(head, "").length > 20) body = t.replace(head, "");
+        else {
+          // formule de date au milieu : « …fixa en 1439 la date » -> on retire seulement « en 1439 »
+          const mid = new RegExp("\\s*,?\\s*\\b(?:in|en|im|nel|vers|around|about|since|depuis|by|on|le|au)\\s+(?:\\d{1,2}(?:er|st|nd|rd|th)?\\s+)?(?:(?:" + MONTHS + ")\\s+)?" + y + "\\b\\s*,?", "i");
+          body = mid.test(t) && !new RegExp(y + "\\s*(?:et|and|und|y|e|[-–])\\s*\\d{2,4}").test(t) ? t.replace(mid, " ").replace(/\s+/g, " ").trim() : t;
+        }
+        body = body.replace(/^[,;:\s]+/, "").replace(/^(?:and|et|but|mais|then|puis|ainsi|thus|so|alors|however|néanmoins)\b,?\s*/i, "");
+        body = unlead(body);
+        // coupe propre : à une virgule, un point-virgule ou une relative, jamais en plein milieu
+        if (body.length > 175) {
+          const cut = body.slice(0, 175);
+          const k = Math.max(cut.lastIndexOf(", "), cut.lastIndexOf("; "), cut.lastIndexOf(" : "), cut.search(/\s(?:which|that|where|who|dont|où|qui|que|auquel|laquelle)\s[^]*$/));
+          body = k > 90 ? body.slice(0, k) : shorten0(body, 175);
+          body = trimTail(body.replace(/[,;:\s]+$/, ""));
+        }
+        body = resolve(body);
+        body = cap(body).replace(/[.;:,\s]+$/, ""); return /…$/.test(body) ? body : body + ".";
+      };
       const PRONS = /^(?:he|she|il|elle|él|ella|egli|er)\b(?!\s+(?:faut|faudra|fallait|y\s+a|s'agit|semble|convient|existe|reste|suffit|vaut|est\s+(?:possible|vrai|probable|important|nécessaire|temps|question))\b)/i;
       const YR = /\b(1[0-9]{3}|20[0-9]{2})\b/;
       const MASC = /^(?:he|il|él|egli|er)\b/i, FEM = /^(?:she|elle|ella|ella)\b/i;
@@ -858,30 +884,34 @@ const Analyse = (() => {
           if (/[\s(,]\p{Lu}/u.test(" " + between.trim()) && /\p{Lu}[\p{L}]+/u.test(between)) continue; }
         if (ag.rows.some(r => r.y === ym[1])) continue;
         const sr = PRONS.test(sn) ? sn.replace(PRONS, ag.name) : sn;
-        let c = shorten(unlead(sr), 150);
-        if (!c.includes(ym[1])) { c = shortAround(clause(unlead(sr), ym[1]), ym[1]); }
-        if (/^(?:…|\s)/.test(c) && sr.length < 170) c = shorten(sr, 170);
-        ag.rows.push({ y: ym[1], t: cap(c.replace(ym[1], "**" + ym[1] + "**")) + ref(it.page) });
+        ag.rows.push({ y: ym[1], t: "**" + ym[1] + "** : " + eventText(sr, ym[1]) + ref(it.page), imp: it.imp });
       }
       for (const e of ents.filter(x => x.rows.length >= 3).sort((x, y) => y.rows.length - x.rows.length).slice(0, 3)) {
         let rows = e.rows.sort((x, y) => +x.y - +y.y);
         rows = rows.filter(r => !/^…/.test(r.t) && r.t.split(/\s+/).length >= 7); if (rows.length < 3) continue;
-        if (rows.length > 5) { const st = (rows.length - 1) / 4; rows = [0, 1, 2, 3, 4].map(i => rows[Math.round(i * st)]); }
+        if (rows.length > 6) rows = [...rows].sort((x, y) => y.imp - x.imp).slice(0, 6).sort((x, y) => +x.y - +y.y);
         chrono.push({ name: e.name, rows: rows.map(r => r.t) });
       }
       if (!chrono.length) {
         const seenY = new Set(), all = [];
         for (const it of its) {
-          const ym = it.s.match(YR); if (!ym || /^\d{3,4}[)\]]/.test(it.s) || seenY.has(ym[1]) || ym.index > 70 || it.s.split(/\s+/).length < 8 || it.s.length > 260) continue;
+          const ym = it.s.match(YR); if (!ym || /^\d{3,4}[)\]]/.test(it.s) || seenY.has(ym[1]) || ym.index > 140 || it.s.split(/\s+/).length < 8 || it.s.length > 320) continue;
           const sr = PRONS.test(it.s) ? null : it.s; if (!sr) continue;
           seenY.add(ym[1]);
-          all.push({ y: ym[1], t: cap(shorten(unlead(sr), 150).replace(ym[1], "**" + ym[1] + "**")) + ref(it.page) });
+          all.push({ y: ym[1], t: "**" + ym[1] + "** : " + eventText(sr, ym[1]) + ref(it.page), imp: it.imp });
         }
-        all.sort((x, y) => +x.y - +y.y);
-        if (all.length >= 4) { let rows = all; if (rows.length > 6) { const st = (rows.length - 1) / 5; rows = [0, 1, 2, 3, 4, 5].map(i => all[Math.round(i * st)]); } chrono.push({ name: "", timeline: true, rows: rows.map(r => r.t) }); }
+        // beaucoup de dates : on en donne davantage, les plus importantes, dans l'ordre du temps
+        const maxRows = all.length >= 14 ? 10 : 6;
+        let rows = all.length > maxRows ? [...all].sort((x, y) => y.imp - x.imp).slice(0, maxRows) : all;
+        rows.sort((x, y) => +x.y - +y.y);
+        if (all.length >= 4) chrono.push({ name: "", timeline: true, rows: rows.map(r => r.t) });
       }
     }
 
+    if (chrono.length) {
+      const DL = new RegExp("\\*\\*(?:\\d{1,2}(?:er)?\\s+)?(?:(?:" + MONTHS + ")\\s+)?(?:1[0-9]{3}|20[0-9]{2})[^*]*\\*\\*", "i");
+      for (let i = facts.length - 1; i >= 0; i--) if (DL.test(facts[i]) && !/\*\*[^*]+\*\*,\s\*\*/.test(facts[i])) facts.splice(i, 1);
+    }
     // Phrases d'annonce préconçues devant chaque section, dans la langue de sortie.
     const L = {
       fra: { brief: "En résumé :", part: ["Dans cette partie, le texte parle surtout de ceci :", "Ici, le texte insiste sur ceci :", "À ce stade, voici ce qu'on apprend :", "Cette partie apporte les idées suivantes :"], facts: "Voici les dates, chiffres et noms à connaître :", pages: "Une idée principale par page :", keep: "Pour retenir l'essentiel :" },
