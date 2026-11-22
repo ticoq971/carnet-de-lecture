@@ -415,9 +415,15 @@ const Analyse = (() => {
     const k = toks.length;
     return Math.max(0, 1 - 2.2 * bad / k) * Math.min(1, 0.35 + 3 * sw / k);
   }
+  // Bibliographie, mentions légales, fragments issus d'une mauvaise coupure : ce n'est pas du contenu.
+  const REFLIKE = /\b(passim|ibid|op\.\s?cit|transcribed|copyright|all rights reserved|dedicated to|nihil obstat|imprimatur|bibliograph)/i;
+  const CITE = /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)/u;
+  const isRef = s => REFLIKE.test(s) || (s.match(/\([^()]*\b\d{4}\b[^()]*\)/g) || []).length >= 2 || /https?:\/\/|^Sources?\b|\bcitation\b|^About this page/i.test(s) || /^\p{Lu}{3,}[ ,]/u.test(s) || (CITE.test(s) && s.length < 170 && /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)[\s,.;IVX]*$/u.test(s));
+  const broken = s => /^[^\p{L}\d"“«(‘'¿¡]/u.test(s) || /^\p{Ll}/u.test(s);
   const tidy = s => s.replace(/(^|\s)[|~^_=<>{}\\#*]+(?=\s|$)/g, " ").replace(/\s+([,.)\]])/g, "$1").replace(/([(\[])\s+/g, "$1").replace(/\s{2,}/g, " ").trim();
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-  function shorten(s, max) {
+  function shorten(s, max) { return trimTail(shorten0(s, max)); }
+  function shorten0(s, max) {
     let t = s.replace(/\s*\((?![^()]*\d)[^()]{0,120}\)/g, "").replace(/\s+[—–]\s+[^—–.]{3,90}\s+[—–]\s+/g, " ");
     if (t.length <= max) return t;
     const cut = t.slice(0, max);
@@ -425,6 +431,8 @@ const Analyse = (() => {
     if (i > max * 0.5) return t.slice(0, i).trim() + "…";
     return cut.replace(/\s+\S*$/, "").replace(/[,;:]$/, "") + "…";
   }
+  const TAILW = /\s+(?:and|or|the|a|an|of|to|at|in|on|for|with|by|from|that|which|who|his|her|their|its|et|ou|de|du|des|la|le|les|un|une|à|au|aux|en|que|qui|dans|pour|par|sur|avec|y|o|del|al|con|por|per|il|lo|gli|und|oder|der|die|das|zu|mit|von)$/i;
+  const trimTail = s => { let t = s.replace(/…$/, "").replace(/[,;:\s]+$/, ""), n = 0; while (TAILW.test(t) && n++ < 3) t = t.replace(TAILW, "").replace(/[,;:\s]+$/, ""); return t + (s.endsWith("…") ? "…" : ""); };
   const unlead = s => { const t = s.replace(LEAD, ""); return t.length > 15 && t !== s ? cap(t) : s; };
 
   function fiche(pages, opts = {}) {
@@ -432,7 +440,7 @@ const Analyse = (() => {
     const P = { court: { parts: 2, per: 1, bref: 1, keep: 2, max: 170, facts: 4 }, moyen: { parts: 4, per: 2, bref: 2, keep: 3, max: 230, facts: 7 }, long: { parts: 6, per: 3, bref: 3, keep: 4, max: 320, facts: 12 } }[opts.len] || { parts: 4, per: 2, bref: 2, keep: 3, max: 230, facts: 7 };
     const a = analyse(pages, { lang: opts.lang });
     const ref = pg => opts.noPages || !pg || pg === "?" ? "" : ` (p. ${pg})`;
-    const its = a.items.map(it => ({ ...it, s: tidy(it.s) })).map(it => ({ ...it, q: quality(it.s) })).filter(it => it.q >= 0.45 && it.t.length >= 3);
+    const its = a.items.map(it => ({ ...it, s: tidy(it.s) })).map(it => ({ ...it, q: quality(it.s) })).filter(it => it.q >= 0.45 && it.t.length >= 3 && !isRef(it.s) && !broken(it.s));
     its.forEach((it, i) => it.k = i);
     const N = its.length;
     if (!N) return null;
@@ -489,7 +497,27 @@ const Analyse = (() => {
       });
       return out.replace(/\*\*(\s+)\*\*/g, "$1");
     };
-    const line = (it, max = P.max) => bold(shorten(unlead(it.s), max)) + ref(it.page);
+    // Sujet principal du texte (personne la plus citée) : remplace le « he / il » d'une phrase sortie de son contexte.
+    const keptTxt = its.map(it => it.s).join(" ");
+    const cnt = n => { const m = keptTxt.match(new RegExp("\\b" + n.replace(/[.*+?^$|()[\]\\{}]/g, "\\$&") + "\\b", "g")); return m ? m.length : 0; };
+    let subject = "";
+    {
+      // le mot à majuscule le plus fréquent (jamais écrit en minuscule, ni mois, ni mot-outil) : le sujet du texte
+      const caps = new Map(), low = new Set();
+      its.forEach(it => (it.s.match(/[\p{L}][\p{L}\p{M}'’\-]*/gu) || []).forEach(w => { if (/^\p{Lu}/u.test(w)) caps.set(w, (caps.get(w) || 0) + 1); else low.add(w); }));
+      const cand = [...caps.entries()].filter(([w]) => w.length > 3 && !low.has(w) && !low.has(w.toLowerCase()) && !MON.test(w) && !ALLSTOP.has(norm(w))).sort((x, y) => y[1] - x[1]);
+      if (cand[0] && cand[0][1] >= 4 && (!cand[1] || cand[0][1] >= cand[1][1] * 1.6)) { const sn = its.filter(it => it.s.includes(cand[0][0])).length; if (sn >= Math.max(3, N * 0.15)) subject = cand[0][0]; }
+    }
+    const PRONW = /^(he|she|il|elle|él|ella|egli|er)$/;
+    const resolve = s => {
+      if (!subject || s.includes(subject)) return s;
+      const ws = s.split(/\s+/);
+      const idx = ws.slice(0, 14).findIndex(w => PRONW.test(w.toLowerCase().replace(/[^\p{L}]/gu, "")));
+      if (idx < 0) return s;
+      ws[idx] = ws[idx].replace(/^\p{L}+/u, subject);
+      return ws.join(" ");
+    };
+    const line = (it, max = P.max) => bold(shorten(resolve(unlead(it.s)), max)) + ref(it.page);
 
     const used = new Set();
     const jac = (x, y) => { let c = 0; for (const t of sets[x.k]) if (sets[y.k].has(t)) c++; return c / Math.max(1, sets[x.k].size + sets[y.k].size - c); };
@@ -539,7 +567,35 @@ const Analyse = (() => {
     }
     // Titre d'une partie : ses mots les plus caractéristiques, pris dans le texte.
     const segDf = new Map(); segs.forEach(sg => new Set(sg.items.flatMap(it => it.t)).forEach(t => segDf.set(t, (segDf.get(t) || 0) + 1)));
+    // Noms propres (« Queen Mary », « Council of Trent ») : de meilleurs titres que deux mots fréquents.
+    const NAMESPAN = /\p{Lu}[\p{L}'’\-]+(?:\s+(?:of|de|du|von|der|di|del|della|d')\s+\p{Lu}[\p{L}'’\-]+|\s+\p{Lu}[\p{L}'’\-]+)*/gu;
+    const lowAll = new Set(), midCaps = new Set();
+    its.forEach(it => { const ws = it.s.match(/[\p{L}][\p{L}\p{M}'’\-]*/gu) || []; ws.forEach((w, i) => { if (/^\p{Lu}/u.test(w)) { if (i) midCaps.add(w); } else lowAll.add(w); }); });
+    const TITLEW = new Set("pope king queen emperor cardinal archbishop bishop duke prince saint st the council church catholic protestant pape roi reine empereur cardinal évêque archevêque duc prince saint papa re regina imperatore vescovo rey reina obispo".split(" "));
+    const spansOf = sg => {
+      const f = new Map();
+      sg.items.forEach(it => { for (const m of it.s.matchAll(NAMESPAN)) {
+        let t = m[0], first = m.index === 0;
+        if (first) { const w0 = t.split(/\s+/)[0]; if (lowAll.has(w0.toLowerCase()) || ALLSTOP.has(norm(w0)) || LEAD.test(w0 + " ")) { t = t.split(/\s+/).slice(1).join(" "); } }
+        if (!t) continue;
+        const ws = t.split(/\s+/);
+        if (ws.length > 3) continue;
+        if (ws.length === 1 && (!midCaps.has(t) || lowAll.has(t.toLowerCase()) || TITLEW.has(t.toLowerCase()) || MON.test(t) || ALLSTOP.has(norm(t)) || t === subject)) continue;
+        if (TITLEW.has(ws[ws.length - 1].toLowerCase()) && ws.length === 1) continue;
+        f.set(t, (f.get(t) || 0) + 1);
+      } });
+      return f;
+    };
+    const spanDf = new Map(); segs.forEach(sg => new Set(spansOf(sg).keys()).forEach(t => spanDf.set(t, (spanDf.get(t) || 0) + 1)));
+    const nameTitle = sg => {
+      const f = spansOf(sg);
+      const top = [...f.entries()].map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.log(1 + segs.length / spanDf.get(t))]).sort((x, y) => y[1] - x[1]);
+      const pick = [];
+      for (const [t] of top) { if (pick.length >= 2) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
+      return pick.length ? pick.join(" · ") : "";
+    };
     const titleOf = sg => {
+      const nt = segs.length > 1 ? nameTitle(sg) : ""; if (nt) return nt;
       const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
       const top = [...f.entries()].filter(([t]) => t.length >= 3 && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
       if (!top.length) return "";
@@ -589,8 +645,9 @@ const Analyse = (() => {
     const rx = x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     // « En 1455, Fust attaque… » devient « 1455 : Fust attaque… » ; sinon la date reste surlignée dans la phrase.
     const factLine = (c, needle) => {
+      c = c.replace(/^((?:of|in|on)\s+)?the same (?:year|month|time|day)\b,?\s*/i, "");
       const m = c.match(new RegExp("^" + DPRE + rx(needle) + "\\s*[,:]?\\s*", "i"));
-      if (m && c.length - m[0].length > 15) return `**${needle}** : ${cap(c.slice(m[0].length))}`;
+      if (m && c.length - m[0].length > 15) return `**${needle}** : ${cap(c.slice(m[0].length).replace(/^(?:of|in|on)\s+the same (?:year|month|time|day)\b,?\s*/i, ""))}`;
       return cap(c.replace(needle, "**" + needle + "**"));
     };
     const good = new Set(its.map(it => it.s.slice(0, 40)));
@@ -604,7 +661,7 @@ const Analyse = (() => {
       const ek = norm(c).slice(0, 50);
       if (seenEv.has(ek)) continue;
       seenD.add(k); seenEv.add(ek);
-      facts.push(factLine(c, d.date) + (d.pages || []).slice(0, 3).map(ref).join(""));
+      facts.push(resolve(factLine(c, d.date)) + (d.pages || []).slice(0, 3).map(ref).join(""));
     }
     const NUM = /\b(\d{1,3}(?:[ ., ]\d{3})+|\d+(?:[.,]\d+)?)\s?(%|‰|pour\s?cent|percent|por\s?ciento|per\s?cento|prozent|[\p{L}]{3,}(?:\s+(?:de|d'|of|di|von)\s+[\p{L}]{3,})?)/gu;
     const seenN = new Set();
@@ -621,11 +678,11 @@ const Analyse = (() => {
         const ek = norm(c).slice(0, 50);
         if (seenEv.has(ek)) break;
         seenEv.add(ek);
-        facts.push(factLine(c, full) + ref(it.page));
+        facts.push(resolve(factLine(c, full)) + ref(it.page));
         break;
       }
     }
-    const ppl = a.people.filter(p => p.name.length > 2).slice(0, 6);
+    const ppl = a.people.map(p => ({ ...p, name: p.name.replace(/[.,;]+$/, "") })).filter(p => p.name.length > 2 && cnt(p.name) >= 1).slice(0, 6);
     if (ppl.length) facts.push(ppl.map(p => `**${p.name}**${(p.pages || []).slice(0, 2).map(ref).join("")}`).join(", "));
 
     // 4. À retenir : les idées fortes pas encore citées, conclusions favorisées.
@@ -634,7 +691,7 @@ const Analyse = (() => {
     // Texte court : on ne répète pas les phrases déjà affichées dans les parties.
     const keep = [], short = N < 24;
     const pool = its.filter(x => !bref.includes(x) && !(short && shown.has(x.k)));
-    for (const it of pool.sort((x, y) => y.imp * kb(y) - x.imp * kb(x))) {
+    for (const it of pool.sort((x, y) => y.imp * kb(y) * (shown.has(y.k) ? 0.4 : 1) - x.imp * kb(x) * (shown.has(x.k) ? 0.4 : 1))) {
       if (keep.length >= (short ? Math.min(P.keep, 2) : P.keep)) break;
       if (keep.some(o => jac(o, it) > 0.35) || bref.some(o => jac(o, it) > 0.45)) continue;
       keep.push(it);
@@ -646,10 +703,10 @@ const Analyse = (() => {
     let byPage = [];
     if (opts.byPage) {
       const pis = [...new Set(its.map(it => it.pi))];
-      if (pis.length > 1) byPage = pis.map(pi => { const l = its.filter(it => it.pi === pi).sort((x, y) => y.imp - x.imp)[0]; return `**p. ${l.page}** : ${bold(shorten(unlead(l.s), 150), 2)}${ref(l.page)}`; });
+      if (pis.length > 1) byPage = pis.map(pi => { const l = its.filter(it => it.pi === pi).sort((x, y) => y.imp - x.imp)[0]; return `**p. ${l.page}** : ${bold(shorten(resolve(unlead(l.s)), 150), 2)}${ref(l.page)}`; });
     }
 
-    let mdx = `## ${H[0]}\n${bref.map(it => bold(shorten(unlead(it.s), P.max + 40))).join(" ")}\n`;
+    let mdx = `## ${H[0]}\n${bref.map(it => bold(shorten(resolve(unlead(it.s)), P.max + 40))).join(" ")}\n`;
     if (parts.length) {
       mdx += `\n## ${H[1]}\n`;
       for (const p of parts) mdx += `### ${p.title || "…"}${p.span}\n${p.lines.map(l => "- " + l).join("\n")}\n`;
@@ -842,7 +899,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1123"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1224"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
