@@ -659,15 +659,16 @@ const Analyse = (() => {
     const spanDf = new Map(); segs.forEach(sg => new Set(spansOf(sg).keys()).forEach(t => spanDf.set(t, (spanDf.get(t) || 0) + 1)));
     const nameTitle = sg => {
       const f = spansOf(sg);
-      const top = [...f.entries()].map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.log(1 + segs.length / spanDf.get(t))]).sort((x, y) => y[1] - x[1]);
+      const minC = sg.items.length >= 4 ? 2 : 1;
+      const top = [...f.entries()].filter(([t, c]) => c >= minC && !/(?:^|\s)\p{L}{1,2}$/u.test(t) && !/\b(?:St|Mme|Dr|Bk|Vol|Ch|No|Nr)$/.test(t)).map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.sqrt(Math.log(1 + segs.length / spanDf.get(t)) + 0.3)]).sort((x, y) => y[1] - x[1]);
       const pick = [];
-      for (const [t] of top) { if (pick.length >= 2) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
+      for (const [t, sc] of top) { if (pick.length >= 2) break; if (pick.length && sc < 0.6 * top[0][1]) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
       return pick.length ? pick.join(" · ") : "";
     };
     const titleOf = sg => {
       const nt = segs.length > 1 ? nameTitle(sg) : ""; if (nt) return nt;
       const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
-      const top = [...f.entries()].filter(([t]) => t.length >= 3 && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
+      const top = [...f.entries()].filter(([t]) => t.length >= 3 && !/^(?:first|second|third|fourth|fifth|last|next|new|old|premier|première|second|dernier|ancien|nouveau|primero|segundo|erste|zweite)$/i.test(form(t)) && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
       if (!top.length) return "";
       // une expression du texte qui contient les deux premiers mots (ex. « caractères mobiles »)
       if (top.length > 1) for (const it of sg.items) {
