@@ -872,7 +872,7 @@ const Analyse = (() => {
       if (!chrono.length) {
         const seenY = new Set(), all = [];
         for (const it of its) {
-          const ym = it.s.match(YR); if (!ym || /^d{3,4}[)]]/.test(it.s) || seenY.has(ym[1]) || ym.index > 70 || it.s.split(/\s+/).length < 8 || it.s.length > 260) continue;
+          const ym = it.s.match(YR); if (!ym || /^\d{3,4}[)\]]/.test(it.s) || seenY.has(ym[1]) || ym.index > 70 || it.s.split(/\s+/).length < 8 || it.s.length > 260) continue;
           const sr = PRONS.test(it.s) ? null : it.s; if (!sr) continue;
           seenY.add(ym[1]);
           all.push({ y: ym[1], t: cap(shorten(unlead(sr), 150).replace(ym[1], "**" + ym[1] + "**")) + ref(it.page) });
