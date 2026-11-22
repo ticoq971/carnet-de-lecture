@@ -24,3 +24,10 @@ https://ticoq971.github.io/carnet-de-lecture/
 - `tess/` : moteur OCR [Tesseract.js](https://github.com/naptha/tesseract.js) 5.1.1 (licence Apache 2.0) et données de langue `tessdata` (`lang-xxx.wasm` = fichiers `xxx.traineddata.gz` renommés). `worker-relais.js` redirige les noms de fichiers.
 
 Après une modification de `carnet-de-lecture.html`, lancer `node build.js` puis committer.
+
+## Installer comme une application
+
+- **iPhone** : ouvrir le site dans Safari → bouton Partager → « Sur l'écran d'accueil ».
+- **Android** : ouvrir le site dans Chrome → menu ⋮ → « Installer l'application » (ou « Ajouter à l'écran d'accueil »).
+
+Quand une nouvelle version est publiée, un bandeau « Nouvelle version disponible » apparaît avec un bouton **Mettre à jour**. En bas de la bibliothèque, « Vérifier les mises à jour » affiche la version installée. `node build.js` met la date et l'heure de la publication dans `version.json`.

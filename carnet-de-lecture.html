@@ -159,12 +159,18 @@ details summary{cursor:pointer;color:var(--muted);font-size:.85rem}
 .answer{display:flex;flex-direction:column;gap:10px}
 .answer blockquote{margin:0;font-family:var(--f-read);line-height:1.65;padding:10px 14px;background:var(--surface-2);border-radius:8px;border:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
 .err{color:var(--bad);font-size:.88rem}
+.update{position:fixed;left:0;right:0;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-ink);padding:calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));font-weight:500;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.update[hidden]{display:none}
+.update button.primary{background:var(--accent-ink);color:var(--accent);border-color:var(--accent-ink)}
+.update button.ghost{color:var(--accent-ink);opacity:.85}
+.version{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;padding-top:24px;color:var(--muted);font-size:.82rem}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom, 0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:.9rem;z-index:20;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 
 <div class="wrap" id="app"><p class="muted">Chargement du carnet…</p></div>
 <div class="toast" id="toast" hidden></div>
+<div class="update" id="update" role="status" hidden><span id="update-txt">Une nouvelle version est disponible.</span><button class="primary" id="update-btn" type="button">Mettre à jour</button><button class="ghost" id="update-later" type="button" aria-label="Plus tard">Plus tard</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
@@ -542,6 +548,39 @@ function render() {
   bindDrop();
 }
 
+/* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
+const APP_VERSION = "__VERSION__"; // remplacé par build.js (date et heure de la publication)
+const Updates = {
+  remote: null, dismissed: false,
+  enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
+  label(v) { const m = String(v || "").match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]} à ${m[4]}h${m[5]}` : String(v || "développement"); },
+  async check(manual) {
+    if (!this.enabled()) { if (manual) toast("La vérification des mises à jour marche dans l'application installée depuis le site."); return; }
+    try {
+      const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+      const j = await r.json(); this.remote = j.version;
+      if (j.version && j.version !== APP_VERSION) {
+        $("#update-txt").textContent = `Nouvelle version disponible (du ${this.label(j.version)}).`;
+        if (manual) this.dismissed = false;
+        if (!this.dismissed) $("#update").hidden = false;
+      } else if (manual) toast(`Vous avez la dernière version (du ${this.label(APP_VERSION)}).`);
+    } catch { if (manual) toast("Impossible de vérifier : pas de connexion internet."); }
+  },
+  apply() {
+    if (S.running || S.aiRun || S.chain) { toast("Attendez la fin de la lecture ou de la fiche en cours."); return; }
+    location.replace(location.pathname + "?v=" + encodeURIComponent(this.remote || Date.now()));
+  },
+  start() {
+    $("#update-btn").onclick = () => this.apply();
+    $("#update-later").onclick = () => { this.dismissed = true; $("#update").hidden = true; };
+    if (!this.enabled()) return;
+    this.check(false);
+    setInterval(() => this.check(false), 15 * 60 * 1000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") this.check(false); });
+  },
+};
+const versionBar = () => `<div class="version"><span>Version du ${esc(Updates.label(APP_VERSION))}</span><button class="ghost small" data-a="checkupd">Vérifier les mises à jour</button></div>`;
+
 function topbar(right = "") {
   return `<header class="top"><div class="brand"><span class="label">Carnet de lecture</span><h1>${S.view === "library" ? "Ma bibliothèque" : esc(book()?.title)}</h1></div><div class="row">${right}</div></header>
   ${Store.mode === "local" ? `<div class="banner">Vos documents sont enregistrés dans ce navigateur uniquement. Pour les retrouver sur un autre appareil, utilisez « Exporter » ici puis « Importer » là-bas.</div>` : ""}`;
@@ -578,7 +617,8 @@ function vLibrary() {
   ${S.loadErr ? `<div class="banner err">${esc(S.loadErr)}</div>` : ""}
   ${S.showNewBook ? `<section class="panel"><h2>Nouveau document</h2><p class="muted small">Un livre, un article, un cours, un rapport, des notes : tout texte à résumer.</p>${bookForm()}<div class="row"><button class="primary" data-a="createbook">Créer</button><button class="ghost" data-a="cancelbook">Annuler</button></div></section>` : ""}
   ${!books.length && !S.showNewBook ? `<div class="empty"><h2>Votre bibliothèque est vide</h2><p class="muted">Ajoutez un livre, un article, un cours ou n'importe quel texte, puis photographiez ses pages ou collez le texte. L'application lit les pages elle-même, sur votre appareil, les range par chapitre ou par partie et résume une page, une partie ou le document entier : points importants, dates, noms, moments marquants et références, avec le numéro de page où les retrouver.</p><p class="muted small">Le livre ci-dessous est un exemple ; il disparaît dès que vous ajoutez votre premier document.</p><div><button class="primary" data-a="newbook">Ajouter mon premier document</button></div></div>` : ""}
-  <div class="shelf">${shown.map(card).join("")}</div>`;
+  <div class="shelf">${shown.map(card).join("")}</div>
+  ${Updates.enabled() ? versionBar() : ""}`;
 }
 
 function vBook() {
@@ -1230,6 +1270,7 @@ app.addEventListener("click", async e => {
     case "airun": runAI(id); break;
     case "aichain": runChain(id); break;
     case "trrun": runTranslate(id); break;
+    case "checkupd": Updates.check(true); break;
     case "trall": runTranslateAll(id); break;
     case "aistop": S.aiStop = true; if (S.chain) S.chain.stop = true; try { IA.engine?.interruptGenerate(); } catch {} break;
     case "newbook": S.showNewBook = true; S.view = "library"; render(); $("#bf-title")?.focus(); break;
@@ -1361,5 +1402,6 @@ app.addEventListener("keydown", e => {
   catch { S.loadErr = "La bibliothèque n'a pas pu être chargée pour l'instant. Vérifiez la connexion puis rechargez la page."; S.books = []; }
   S.books.forEach(b => { b.chapters = arr(b.chapters); });
   S.ready = true; render();
+  Updates.start();
 })();
 </script>

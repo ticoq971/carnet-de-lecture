@@ -1,0 +1,24 @@
+{
+  "name": "Carnet de lecture",
+  "short_name": "Carnet",
+  "lang": "fr",
+  "description": "Photographiez vos pages : lecture, fiches de synthèse et traduction, sur votre appareil.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eceee9",
+  "theme_color": "#2d3c9c",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
