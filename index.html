@@ -440,7 +440,7 @@ const Analyse = (() => {
     t = String(t || "").replace(/\r/g, "");
     { const m = /^[ \t]*=+[ \t]*(?:Notes? et références|Notes|Références|Bibliographie|Liens externes|Voir aussi|Articles connexes|Annexes|Sources|References|Bibliography|External links|See also|Further reading|Referencias|Bibliografía|Enlaces externos|Riferimenti|Bibliografia|Collegamenti esterni|Einzelnachweise|Literatur|Weblinks)[ \t]*=+[ \t]*$/gim; let c, last = -1; while ((c = m.exec(t))) { if (c.index > t.length * 0.4) { last = c.index; break; } } if (last > 0) t = t.slice(0, last); }
     // renvois de références (« (cf. SC 7) », « (PO 5 ; cf. SC 122-127) », « (MF) ») : utiles en note, pas dans un résumé
-    t = t.replace(/\s*\(\s*(?:cf\.?|voir|see|vgl\.?|véase|vedi)\s[^()]{1,80}\)/gi, "").replace(/\s*\(\s*[A-Z]{2,6}[a-z]?\s*\d{1,4}(?:[,.;:\-–]\s*\d{1,4})*(?:\s*;[^()]{1,50})?\s*\)/g, "").replace(/\s*\(\s*[A-Z]{2,5}\s*\)/g, "").replace(/\s+([.,;:])/g, "$1");
+    t = t.replace(/\s*\(\s*(?:cf\.?|voir|see|vgl\.?|véase|vedi)\s[^()]{1,80}\)/gi, "").replace(/\s*\(\s*[A-Z]{2,6}[a-z]?\s*\d{1,4}(?:[,.;:\-–]\s*\d{1,4})*(?:\s*;[^()]{1,50})?\s*\)/g, "").replace(/\s*\(\s*[A-Z]{2,5}\s*\)/g, "").replace(/\s+([.,;])/g, "$1");
     t = t.replace(/^[ \t]*Portail\b.*$/gm, "").replace(/^[ \t]*=+[ \t]*(.+?)[ \t]*=+[ \t]*$/gm, "\n$1.\n").split(/\n/).map(l => l.replace(/\b(?:Previous|Précédent|Anterior|Precedente|Zurück)\s*[-–|]\s*(?:Next|Suivant|Siguiente|Successivo|Weiter)\b/gi, " ")).filter(l => !/^\s*\d{1,4}(?:\s+\d{1,4})*\s*$/.test(l)).join("\n");
     t = t.split(/\n\s*\n/).map(p => { const q = p.trim(); return q && !/\n/.test(q) && q.length <= 90 && q.split(/\s+/).length >= 2 && /[\p{L}\d]$/u.test(q) && /^[\p{Lu}\d]/u.test(q) ? q + "." : p; }).join("\n\n");
     // appels de note collés à la fin d'une phrase (« …morals."55 »)
@@ -1213,7 +1213,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1832"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1833"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
