@@ -758,14 +758,24 @@ const Analyse = (() => {
       if (pis.length > 1) byPage = pis.map(pi => { const l = its.filter(it => it.pi === pi).sort((x, y) => y.imp - x.imp)[0]; return `**p. ${l.page}** : ${bold(shorten(resolve(unlead(l.s)), 150), 2)}${ref(l.page)}`; });
     }
 
-    let mdx = introMd + `## ${H[0]}\n${bref.map(it => bold(shorten(resolve(unlead(it.s)), P.max + 40))).join(" ")}\n`;
+    // Phrases d'annonce préconçues devant chaque section, dans la langue de sortie.
+    const L = {
+      fra: { brief: "En résumé :", part: ["Dans cette partie, le texte parle surtout de ceci :", "Ici, le texte insiste sur ceci :", "À ce stade, voici ce qu'on apprend :", "Cette partie apporte les idées suivantes :"], facts: "Voici les dates, chiffres et noms à connaître :", pages: "Une idée principale par page :", keep: "Pour retenir l'essentiel :" },
+      eng: { brief: "In summary:", part: ["In this part, the text mainly says this:", "Here, the text insists on this:", "At this point, this is what we learn:", "This part brings the following ideas:"], facts: "Here are the dates, figures and names to know:", pages: "One main idea per page:", keep: "To remember the essentials:" },
+      spa: { brief: "En resumen:", part: ["En esta parte, el texto habla sobre todo de esto:", "Aquí el texto insiste en esto:", "En este punto, esto es lo que se aprende:", "Esta parte aporta las siguientes ideas:"], facts: "Estas son las fechas, cifras y nombres que conviene conocer:", pages: "Una idea principal por página:", keep: "Para recordar lo esencial:" },
+      ita: { brief: "In sintesi:", part: ["In questa parte, il testo parla soprattutto di questo:", "Qui il testo insiste su questo:", "A questo punto, ecco cosa si apprende:", "Questa parte porta le seguenti idee:"], facts: "Ecco le date, le cifre e i nomi da conoscere:", pages: "Un'idea principale per pagina:", keep: "Per ricordare l'essenziale:" },
+      deu: { brief: "Zusammengefasst:", part: ["In diesem Teil geht es vor allem um Folgendes:", "Hier betont der Text Folgendes:", "An dieser Stelle erfährt man Folgendes:", "Dieser Teil bringt die folgenden Gedanken:"], facts: "Diese Daten, Zahlen und Namen sollte man kennen:", pages: "Ein Hauptgedanke pro Seite:", keep: "Das Wichtigste zum Merken:" },
+    };
+    const LL = L[opts.out] || L.fra;
+    const ptitle = t => String(t || "").replace(/\s*·\s*/g, ", ");
+    let mdx = introMd + "## " + H[0] + "\n" + LL.brief + " " + bref.map(it => bold(shorten(resolve(unlead(it.s)), P.max + 40))).join(" ") + "\n";
     if (parts.length) {
-      mdx += `\n## ${H[1]}\n`;
-      for (const p of parts) mdx += `### ${p.title || "…"}${p.span}\n${p.lines.map(l => "- " + l).join("\n")}\n`;
+      mdx += "\n## " + H[1] + "\n";
+      parts.forEach((p, pi) => { mdx += "### " + (p.title || "…") + p.span + "\n" + LL.part[pi % LL.part.length] + "\n" + p.lines.map(l => "- " + l).join("\n") + "\n"; });
     }
-    if (facts.length) mdx += `\n## ${H[2]}\n${facts.map(f => "- " + f).join("\n")}\n`;
-    if (byPage.length) mdx += `\n## ${H[4]}\n${byPage.map(f => "- " + f).join("\n")}\n`;
-    if (keep.length) mdx += `\n## ${H[3]}\n${keep.map(it => "- " + line(it, 200)).join("\n")}\n`;
+    if (facts.length) mdx += "\n## " + H[2] + "\n" + LL.facts + "\n" + facts.map(f => "- " + f).join("\n") + "\n";
+    if (byPage.length) mdx += "\n## " + H[4] + "\n" + LL.pages + "\n" + byPage.map(f => "- " + f).join("\n") + "\n";
+    if (keep.length) mdx += "\n## " + H[3] + "\n" + LL.keep + "\n" + keep.map(it => "- " + line(it, 200)).join("\n") + "\n";
     return mdx;
   }
 
