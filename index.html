@@ -416,7 +416,7 @@ const Analyse = (() => {
     return Math.max(0, 1 - 2.2 * bad / k) * Math.min(1, 0.35 + 3 * sw / k);
   }
   // Bibliographie, mentions légales, fragments issus d'une mauvaise coupure : ce n'est pas du contenu.
-  const REFLIKE = /\b(passim|ibid|op\.\s?cit|transcribed|copyright|all rights reserved|dedicated to|nihil obstat|imprimatur|bibliograph)/i;
+  const REFLIKE = /\b(passim|ibid|op\.\s?cit|transcribed|copyright|all rights reserved|dedicated to|nihil obstat|imprimatur|bibliograph|please help|support the mission|advertis|contact us|subscribe to)/i;
   const CITE = /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)/u;
   const isRef = s => REFLIKE.test(s) || (s.match(/\([^()]*\b\d{4}\b[^()]*\)/g) || []).length >= 2 || /https?:\/\/|^Sources?\b|\bcitation\b|^About this page/i.test(s) || /^\p{Lu}{3,}[ ,]/u.test(s) || (CITE.test(s) && s.length < 170 && /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)[\s,.;IVX]*$/u.test(s));
   const broken = s => /^[^\p{L}\d"“«(‘'¿¡]/u.test(s) || /^\p{Ll}/u.test(s);
@@ -530,6 +530,31 @@ const Analyse = (() => {
       }
       return out.sort((x, y) => x.k - y.k);
     };
+
+    // 0. Présentation : la phrase qui identifie le personnage ou le sujet principal (naissance, mort, fonction).
+    let introMd = "";
+    if (subject) {
+      const BORN = /\b(born|died|né|née|mort|morte|décédé|décédée|nacido|nacida|murió|nato|nata|morto|morta|geboren|gestorben|natus|obiit)\b/i;
+      // texte brut (la découpe en phrases coupe « 1523; died at Padua, 26 Dec. »)
+      const raw = pages.map(p => (p && p.text) || "").join("\n");
+      const bi = raw.slice(0, 900).search(BORN);
+      if (bi >= 0) {
+        const st = Math.max(raw.lastIndexOf("\n", bi), raw.lastIndexOf(". ", bi) + 1, 0);
+        const rest = raw.slice(bi, bi + 300);
+        const DIED = "(?:died|mort|morte|décédé|décédée|murió|morto|morta|gestorben|obiit)";
+        const m = rest.match(new RegExp("^.*?\\b\\d{3,4}\\b.{0,90}?\\b" + DIED + "\\b.{0,80}?\\b\\d{3,4}\\b", "i")) || rest.match(/^.*?\b\d{3,4}\b/);
+        if (m) {
+          const l0 = raw.split(/\n/)[0].trim();
+          const full = l0.length < 60 && l0.split(/\s+/).length <= 6 && l0.includes(subject) && !/[.,;:]$/.test(l0) ? l0 : subject;
+          const idt = tidy((raw.slice(st, bi) + m[0]).replace(/\s+/g, " ")).replace(/^[\s.]+|[;,\s]+$/g, "");
+          if (idt.length > 12 && idt.length < 300) {
+            introMd = `## ${H[5] || "Présentation"}\n**${full}** : ${idt}\n\n`;
+            const first = its.find(it => idt.includes(it.s.slice(0, 30)));
+            if (first) used.add(first.k);
+          }
+        }
+      }
+    }
 
     // 1. En bref : les phrases les plus centrales, le début du texte un peu favorisé.
     const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => it.k < 3 ? 1.25 : 1);
@@ -706,7 +731,7 @@ const Analyse = (() => {
       if (pis.length > 1) byPage = pis.map(pi => { const l = its.filter(it => it.pi === pi).sort((x, y) => y.imp - x.imp)[0]; return `**p. ${l.page}** : ${bold(shorten(resolve(unlead(l.s)), 150), 2)}${ref(l.page)}`; });
     }
 
-    let mdx = `## ${H[0]}\n${bref.map(it => bold(shorten(resolve(unlead(it.s)), P.max + 40))).join(" ")}\n`;
+    let mdx = introMd + `## ${H[0]}\n${bref.map(it => bold(shorten(resolve(unlead(it.s)), P.max + 40))).join(" ")}\n`;
     if (parts.length) {
       mdx += `\n## ${H[1]}\n`;
       for (const p of parts) mdx += `### ${p.title || "…"}${p.span}\n${p.lines.map(l => "- " + l).join("\n")}\n`;
@@ -735,11 +760,11 @@ const SPINES = ["#2d3c9c", "#7a3b69", "#2b6e62", "#8a5a1f", "#3e5a7a", "#6b4fa0"
 const spineFor = s => SPINES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % SPINES.length];
 // Langues dans lesquelles l'IA rédige les fiches et traduit (le latin et le grec sont lus, pas produits)
 const OUT = {
-  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page"] },
-  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways", "Page by page"] },
-  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar", "Página por página"] },
-  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare", "Pagina per pagina"] },
-  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken", "Seite für Seite"] },
+  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page", "Présentation"] },
+  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways", "Page by page", "Introduction"] },
+  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar", "Página por página", "Presentación"] },
+  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare", "Pagina per pagina", "Presentazione"] },
+  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken", "Seite für Seite", "Vorstellung"] },
 };
 const LANGS = [["fra", "Français"], ["eng", "Anglais"], ["spa", "Espagnol"], ["ita", "Italien"], ["deu", "Allemand"], ["lat", "Latin"], ["grc", "Grec ancien"], ["ell", "Grec moderne"]];
 const langName = c => LANGS.find(l => l[0] === c)?.[1] || c;
@@ -899,7 +924,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1224"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1232"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
