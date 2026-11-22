@@ -592,8 +592,8 @@ const Analyse = (() => {
         const T = TPL || { about: x => "Ce texte parle de **" + x + "**.", bio: x => "Ce texte présente **" + x + "**.", start: "Il commence ainsi : ", id: "En quelques mots : ", period: (p, q) => "Il couvre la période de " + p + " à " + q + ".", names: l => "Il cite notamment " + l + ".", size: (w, n) => "Il compte environ " + w + " mots" + (n > 1 ? ", sur " + n + " pages" : "") + "." };
         const sent = [introHead.bio ? T.bio(introHead.label) : T.about(introHead.label)];
         if (!introHead.bio) {
-          const ys = [...new Set(a.dates.map(d => (String(d.date).match(/\b(1\d{3}|20\d{2})\b/) || [])[1]).filter(Boolean).map(Number))].sort((x, y) => x - y);
-          if (ys.length >= 2 && ys[ys.length - 1] - ys[0] >= 1) sent.push(T.period(ys[0], ys[ys.length - 1]));
+          const all = (pages.map(p => (p && p.text) || "").join(" ").match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/g) || []).map(Number).sort((x, y) => x - y);
+          if (all.length >= 2) { const cut = Math.floor(all.length * 0.05), lo = all[cut], hi = all[all.length - 1 - cut]; if (hi - lo >= 1) sent.push(T.period(lo, hi)); }
         }
         const skip = new Set([introHead.label, subject].filter(Boolean).map(x => x.toLowerCase()));
         const lb = introHead.label.toLowerCase();
@@ -607,7 +607,7 @@ const Analyse = (() => {
     }
 
     // 1. En bref : les phrases les plus centrales, le début du texte un peu favorisé.
-    const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => it.k < 3 ? 1.25 : 1);
+    const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => (it.k < 4 ? (N > 40 ? 1.7 : 1.25) : it.k < 9 && N > 40 ? 1.25 : 1) * ((it.s.match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/g) || []).length >= 3 ? 0.6 : 1) * (subject && it.s.includes(subject) ? 1.2 : 1));
 
     // 2. Les grandes parties : groupes donnés (chapitres) ou découpage aux changements de sujet.
     let segs;
@@ -665,7 +665,7 @@ const Analyse = (() => {
     const nameTitle = sg => {
       const f = spansOf(sg);
       const minC = sg.items.length >= 4 ? 2 : 1;
-      const top = [...f.entries()].filter(([t, c]) => c >= minC && !/\p{Ll}\p{Lu}/u.test(t) && !/(?:^|\s)\p{L}{1,2}$/u.test(t) && !/\b(?:St|Mme|Dr|Bk|Vol|Ch|No|Nr)$/.test(t)).map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.sqrt(Math.log(1 + segs.length / spanDf.get(t)) + 0.3)]).sort((x, y) => y[1] - x[1]);
+      const top = [...f.entries()].filter(([t, c]) => c >= minC && !/\p{Ll}\p{Lu}/u.test(t) && !/^[\p{Lu}\d-]{2,5}$/u.test(t) && !/(?:^|\s)\p{L}{1,2}$/u.test(t) && !/\b(?:St|Mme|Dr|Bk|Vol|Ch|No|Nr)$/.test(t)).map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.sqrt(Math.log(1 + segs.length / spanDf.get(t)) + 0.3)]).sort((x, y) => y[1] - x[1]);
       const pick = [];
       if (segs.length >= 3) { const rare = top.filter(([t]) => spanDf.get(t) < 0.6 * segs.length); if (rare.length) top.splice(0, top.length, ...rare); }
       for (const [t, sc] of top) { if (pick.length >= 2) break; if (pick.length && sc < 0.6 * top[0][1]) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
