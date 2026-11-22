@@ -566,7 +566,10 @@ const Analyse = (() => {
         const l0 = String((pages[0] && pages[0].text) || "").split(/\n/)[0].trim().replace(/^\p{Lu}[\p{Lu} ]{4,}:\s*/u, "");
         const l1 = l0.replace(/^(?:chapitre|chapter|capítulo|capitolo|kapitel|caput|partie|part|parte|teil)\s+[\wIVXivx]+\s*[—–:\-.]*\s*/i, "");
         const t0 = l1.length >= 3 ? l1 : l0;
-        label = subject || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
+        const r0 = String((pages[0] && pages[0].text) || "").replace(/\r/g, "").replace(/^\s+/, "");
+        const t0n = t0.replace(/\.$/, "");
+        const isTitle = t0n.length > 2 && t0.length < 60 && t0n.split(/\s+/).length <= 5 && !/[.,;:!?]$/.test(t0n) && /^\p{Lu}/u.test(t0n) && /^[^\n]+\n\s*\n/.test(r0);
+        label = (isTitle ? t0n : "") || subject || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
         if (!label) { const pn = a.people.map(p => p.name.replace(/[.,;]+$/, "")).find(n => cnt(n) >= 2); if (pn) label = pn; }
         if (!label) { const kt = [...keyTerms][0]; label = kt ? cap(form(kt)) : ""; }
         const last = label.toLowerCase().split(/\s+/).pop();
@@ -662,6 +665,7 @@ const Analyse = (() => {
       const minC = sg.items.length >= 4 ? 2 : 1;
       const top = [...f.entries()].filter(([t, c]) => c >= minC && !/(?:^|\s)\p{L}{1,2}$/u.test(t) && !/\b(?:St|Mme|Dr|Bk|Vol|Ch|No|Nr)$/.test(t)).map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.sqrt(Math.log(1 + segs.length / spanDf.get(t)) + 0.3)]).sort((x, y) => y[1] - x[1]);
       const pick = [];
+      if (segs.length >= 3) { const rare = top.filter(([t]) => spanDf.get(t) < 0.6 * segs.length); if (rare.length) top.splice(0, top.length, ...rare); }
       for (const [t, sc] of top) { if (pick.length >= 2) break; if (pick.length && sc < 0.6 * top[0][1]) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
       return pick.length ? pick.join(" · ") : "";
     };
