@@ -688,7 +688,7 @@ const Analyse = (() => {
       const per = opts.groups ? Math.max(1, P.per) : P.per;
       let ch = take(sg.items, per);
       if (!ch.length) ch = [...sg.items].sort((x, y) => y.imp - x.imp).slice(0, 1);
-      return { title: sg.title || titleOf(sg), span: opts.groups ? pageSpan(sg) : "", lines: ch.map(it => line(it)) };
+      return { title: sg.title || titleOf(sg), span: opts.groups ? pageSpan(sg) : "", raw: sg.items.map(it => it.s).join(" "), lines: ch.map(it => line(it)) };
     }).filter(p => p.lines.length);
 
     // 3. Chiffres, dates et noms (en version courte si la phrase est déjà affichée plus haut)
@@ -783,11 +783,43 @@ const Analyse = (() => {
       deu: { brief: "Zusammengefasst:", part: ["In diesem Teil geht es vor allem um Folgendes:", "Hier betont der Text Folgendes:", "An dieser Stelle erfährt man Folgendes:", "Dieser Teil bringt die folgenden Gedanken:"], facts: "Diese Daten, Zahlen und Namen sollte man kennen:", pages: "Ein Hauptgedanke pro Seite:", keep: "Das Wichtigste zum Merken:" },
     };
     const LL = L[opts.out] || L.fra;
+    const G = {
+      fra: { num: "Cette partie s'appuie sur des chiffres :", time: "Cette partie raconte une suite d'événements :", def: "Cette partie explique de quoi il s'agit :", advice: "Cette partie donne des conseils ou des règles :", end: "Cette partie conclut :", open: "Le texte commence par poser le sujet :" },
+      eng: { num: "This part relies on figures:", time: "This part tells a sequence of events:", def: "This part explains what it is about:", advice: "This part gives advice or rules:", end: "This part concludes:", open: "The text starts by setting out the subject:" },
+      spa: { num: "Esta parte se apoya en cifras:", time: "Esta parte cuenta una sucesión de hechos:", def: "Esta parte explica de qué se trata:", advice: "Esta parte da consejos o reglas:", end: "Esta parte concluye:", open: "El texto empieza planteando el tema:" },
+      ita: { num: "Questa parte si basa su cifre:", time: "Questa parte racconta una serie di eventi:", def: "Questa parte spiega di che cosa si tratta:", advice: "Questa parte dà consigli o regole:", end: "Questa parte conclude:", open: "Il testo comincia presentando l'argomento:" },
+      deu: { num: "Dieser Teil stützt sich auf Zahlen:", time: "Dieser Teil erzählt eine Abfolge von Ereignissen:", def: "Dieser Teil erklärt, worum es geht:", advice: "Dieser Teil gibt Ratschläge oder Regeln:", end: "Dieser Teil schließt ab:", open: "Der Text beginnt mit der Einführung ins Thema:" },
+    };
+    const GG = G[opts.out] || G.fra;
+    // Reconnaît le genre du passage (chiffres, récit, définition, conseil, conclusion) d'après son texte.
+    const genre = (p, i, n) => {
+      const t = p.raw || "";
+      const years = new Set((t.match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/g) || [])).size;
+      const nums = (t.match(/\d+(?:[.,]\d+)?\s?(?:%|€|\$|£|euros?|dollars?|millions?|milliards?|billions?|million|billion|Mio|Mrd|per cent|percent|pour cent|por ciento|per cento|Prozent)/gi) || []).length;
+      const head = t.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ");
+      const def = /\b(?:est (?:un|une|le|la|l')|désigne|signifie|se définit|is (?:a|an|the)|refers to|means|es (?:un|una|el|la)|significa|è (?:un|una|il|la)|ist (?:ein|eine|der|die|das)|bedeutet)\b/i.test(head);
+      const adv = (t.match(/\b(?:il faut|doit|doivent|devez|conseill\w+|recommand\w+|should|must|need to|recommend\w*|debe|deben|conviene|devi|deve|bisogna|sollte|sollten|muss|müssen)\b/gi) || []).length;
+      const end = n >= 3 && i === n - 1 && /\b(?:en conclusion|en somme|finalement|enfin|au final|in conclusion|finally|overall|to sum up|en conclusión|finalmente|in conclusione|infine|zusammenfassend|schließlich|abschließend)\b/i.test(t);
+      if (end) return "end";
+      if (nums >= 3) return "num";
+      if (def) return "def";
+      if (adv >= 2) return "advice";
+      if (years >= 3) return "time";
+      if (n >= 3 && i === 0) return "open";
+      return "";
+    };
+    let prevG = "", gi = 0;
+    parts.forEach((p, i) => {
+      let g = genre(p, i, parts.length);
+      if (g && g === prevG) g = "";
+      p.intro = g ? GG[g] : LL.part[gi++ % LL.part.length];
+      prevG = g;
+    });
     const ptitle = t => String(t || "").replace(/\s*·\s*/g, ", ");
     let mdx = introMd + "## " + H[0] + "\n" + LL.brief + " " + bref.map(it => bold(shorten(resolve(unlead(it.s)), P.max + 40))).join(" ") + "\n";
     if (parts.length) {
       mdx += "\n## " + H[1] + "\n";
-      parts.forEach((p, pi) => { mdx += "### " + (p.title || "…") + p.span + "\n" + LL.part[pi % LL.part.length] + "\n" + p.lines.map(l => "- " + l).join("\n") + "\n"; });
+      parts.forEach((p, pi) => { mdx += "### " + (p.title || "…") + p.span + "\n" + p.intro + "\n" + p.lines.map(l => "- " + l).join("\n") + "\n"; });
     }
     if (facts.length) mdx += "\n## " + H[2] + "\n" + LL.facts + "\n" + facts.map(f => "- " + f).join("\n") + "\n";
     if (byPage.length) mdx += "\n## " + H[4] + "\n" + LL.pages + "\n" + byPage.map(f => "- " + f).join("\n") + "\n";
@@ -977,7 +1009,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1308"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1424"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
