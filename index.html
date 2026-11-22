@@ -589,9 +589,13 @@ const Analyse = (() => {
         const r0 = String((pages[0] && pages[0].text) || "").replace(/\r/g, "").replace(/^\s+/, "");
         const t0n = t0.replace(/\.$/, "");
         const isTitle = t0n.length > 2 && t0.length < 60 && t0n.split(/\s+/).length <= 5 && !/[.,;:!?]$/.test(t0n) && /^\p{Lu}/u.test(t0n) && /^[^\n]+\n\s*\n/.test(r0);
-        label = (isTitle ? t0n : "") || subject || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
+        // sans titre : un mot à majuscule (Christ, Dieu) peut sembler le sujet alors que le texte parle surtout d'autre chose (l'autel, l'église) : le mot le plus présent l'emporte
+        let subj2 = subject;
+        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && subject && (df.get(kt0) > its.filter(it => it.s.includes(subject)).length)) { const w = cap(form(kt0)); if (w.length > 3) subj2 = w; } }
+        label = (isTitle ? t0n : "") || subj2 || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
         if (!label) { const pn = a.people.map(p => p.name.replace(/[.,;]+$/, "")).find(n => cnt(n) >= 2); if (pn) label = pn; }
         if (!label) { const kt = [...keyTerms][0]; label = kt ? cap(form(kt)) : ""; }
+        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) label = w; } }
         const last = label.toLowerCase().split(/\s+/).pop();
         const cand = its.slice(0, 3).find(it => last && !used.has(it.k) && !PRON.test(it.s) && it.s.toLowerCase().includes(last)) || its.find(it => !used.has(it.k) && !PRON.test(it.s)) || its.find(it => !used.has(it.k));
         if (label && cand) {
@@ -601,7 +605,7 @@ const Analyse = (() => {
       }
       if (introHead) {
         const TPL = {
-          fra: { about: x => "Ce texte parle de **" + x + "**.", bio: x => "Ce texte présente **" + x + "**.", start: "Il commence ainsi : ", id: "En quelques mots : ", period: (p, q) => "Il couvre la période de " + p + " à " + q + ".", names: l => "Il cite notamment " + l + ".", size: (w, n) => "Il compte environ " + w + " mots" + (n > 1 ? ", sur " + n + " pages" : "") + "." },
+          fra: { about: x => (/^[AEIOUHÉÈÊÀÂÎÔÛ]/.test(x) && !/^H[aeiouéè]?[rl]?[^aeiou]/.test(x) ? "Ce texte parle d'**" : "Ce texte parle de **") + x + "**.", bio: x => "Ce texte présente **" + x + "**.", start: "Il commence ainsi : ", id: "En quelques mots : ", period: (p, q) => "Il couvre la période de " + p + " à " + q + ".", names: l => "Il cite notamment " + l + ".", size: (w, n) => "Il compte environ " + w + " mots" + (n > 1 ? ", sur " + n + " pages" : "") + "." },
           eng: { about: x => "This text is about **" + x + "**.", bio: x => "This text introduces **" + x + "**.", start: "It begins: ", id: "In a few words: ", period: (p, q) => "It covers the period from " + p + " to " + q + ".", names: l => "It mentions in particular " + l + ".", size: (w, n) => "It is about " + w + " words long" + (n > 1 ? ", over " + n + " pages" : "") + "." },
           spa: { about: x => "Este texto trata de **" + x + "**.", bio: x => "Este texto presenta a **" + x + "**.", start: "Empieza así: ", id: "En pocas palabras: ", period: (p, q) => "Abarca el período de " + p + " a " + q + ".", names: l => "Cita en particular a " + l + ".", size: (w, n) => "Tiene unas " + w + " palabras" + (n > 1 ? ", en " + n + " páginas" : "") + "." },
           ita: { about: x => "Questo testo parla di **" + x + "**.", bio: x => "Questo testo presenta **" + x + "**.", start: "Comincia così: ", id: "In breve: ", period: (p, q) => "Copre il periodo dal " + p + " al " + q + ".", names: l => "Cita in particolare " + l + ".", size: (w, n) => "Conta circa " + w + " parole" + (n > 1 ? ", su " + n + " pagine" : "") + "." },
@@ -1213,7 +1217,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1833"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1835"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
