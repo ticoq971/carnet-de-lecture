@@ -516,7 +516,7 @@ const Analyse = (() => {
     };
 
     // 0. Présentation : la phrase qui identifie le personnage ou le sujet principal (naissance, mort, fonction).
-    let introMd = "";
+    let introMd = "", introHead = null;
     if (subject) {
       const BORN = /\b(born|died|né|née|mort|morte|décédé|décédée|nacido|nacida|murió|nato|nata|morto|morta|geboren|gestorben|natus|obiit)\b/i;
       // texte brut (la découpe en phrases coupe « 1523; died at Padua, 26 Dec. »)
@@ -532,7 +532,7 @@ const Analyse = (() => {
           const full = l0.length < 60 && l0.split(/\s+/).length <= 6 && l0.includes(subject) && !/[.,;:]$/.test(l0) ? l0 : subject;
           const idt = tidy((raw.slice(st, bi) + m[0]).replace(/\s+/g, " ")).replace(/^[\s.]+|[;,\s]+$/g, "");
           if (idt.length > 12 && idt.length < 300) {
-            introMd = `## ${H[5] || "Présentation"}\n**${full}** : ${idt}\n\n`;
+            introHead = { label: full, text: idt, bio: true };
             const first = its.find(it => idt.includes(it.s.slice(0, 30)));
             if (first) used.add(first.k);
           }
@@ -542,7 +542,7 @@ const Analyse = (() => {
 
     // 0b. Intro pour tout texte : de quoi (ou de qui) on parle, la période, les noms cités.
     {
-      const bio = !!introMd;
+      const bio = !!introHead;
       let label = "";
       if (!bio && N >= 3) {
         const l0 = String((pages[0] && pages[0].text) || "").split(/\n/)[0].trim();
@@ -554,20 +554,32 @@ const Analyse = (() => {
         const last = label.toLowerCase().split(/\s+/).pop();
         const cand = its.slice(0, 3).find(it => last && !used.has(it.k) && !PRON.test(it.s) && it.s.toLowerCase().includes(last)) || its.find(it => !used.has(it.k) && !PRON.test(it.s)) || its.find(it => !used.has(it.k));
         if (label && cand) {
-          introMd = `## ${H[5] || "Présentation"}\n**${label}** : ${bold(shorten(resolve(unlead(cand.s)), 260), 0)}${ref(cand.page)}\n`;
+          introHead = { label, text: bold(shorten(resolve(unlead(cand.s)), 260), 0) + ref(cand.page) };
           used.add(cand.k);
         }
       }
-      if (introMd) {
-        const extra = [];
-        if (!bio) {
+      if (introHead) {
+        const TPL = {
+          fra: { about: x => "Ce texte parle de **" + x + "**.", bio: x => "Ce texte présente **" + x + "**.", start: "Il commence ainsi : ", id: "En quelques mots : ", period: (p, q) => "Il couvre la période de " + p + " à " + q + ".", names: l => "Il cite notamment " + l + ".", size: (w, n) => "Il compte environ " + w + " mots" + (n > 1 ? ", sur " + n + " pages" : "") + "." },
+          eng: { about: x => "This text is about **" + x + "**.", bio: x => "This text introduces **" + x + "**.", start: "It begins: ", id: "In a few words: ", period: (p, q) => "It covers the period from " + p + " to " + q + ".", names: l => "It mentions in particular " + l + ".", size: (w, n) => "It is about " + w + " words long" + (n > 1 ? ", over " + n + " pages" : "") + "." },
+          spa: { about: x => "Este texto trata de **" + x + "**.", bio: x => "Este texto presenta a **" + x + "**.", start: "Empieza así: ", id: "En pocas palabras: ", period: (p, q) => "Abarca el período de " + p + " a " + q + ".", names: l => "Cita en particular a " + l + ".", size: (w, n) => "Tiene unas " + w + " palabras" + (n > 1 ? ", en " + n + " páginas" : "") + "." },
+          ita: { about: x => "Questo testo parla di **" + x + "**.", bio: x => "Questo testo presenta **" + x + "**.", start: "Comincia così: ", id: "In breve: ", period: (p, q) => "Copre il periodo dal " + p + " al " + q + ".", names: l => "Cita in particolare " + l + ".", size: (w, n) => "Conta circa " + w + " parole" + (n > 1 ? ", su " + n + " pagine" : "") + "." },
+          deu: { about: x => "Dieser Text handelt von **" + x + "**.", bio: x => "Dieser Text stellt **" + x + "** vor.", start: "Er beginnt so: ", id: "Kurz gesagt: ", period: (p, q) => "Er umfasst den Zeitraum von " + p + " bis " + q + ".", names: l => "Genannt werden vor allem " + l + ".", size: (w, n) => "Er hat etwa " + w + " Wörter" + (n > 1 ? " auf " + n + " Seiten" : "") + "." },
+        }[opts.out] || null;
+        const T = TPL || { about: x => "Ce texte parle de **" + x + "**.", bio: x => "Ce texte présente **" + x + "**.", start: "Il commence ainsi : ", id: "En quelques mots : ", period: (p, q) => "Il couvre la période de " + p + " à " + q + ".", names: l => "Il cite notamment " + l + ".", size: (w, n) => "Il compte environ " + w + " mots" + (n > 1 ? ", sur " + n + " pages" : "") + "." };
+        const sent = [introHead.bio ? T.bio(introHead.label) : T.about(introHead.label)];
+        if (!introHead.bio) {
           const ys = [...new Set(a.dates.map(d => (String(d.date).match(/\b(1\d{3}|20\d{2})\b/) || [])[1]).filter(Boolean).map(Number))].sort((x, y) => x - y);
-          if (ys.length >= 2 && ys[ys.length - 1] - ys[0] >= 1) extra.push(`**${H[6] || "Période"}** : ${ys[0]} – ${ys[ys.length - 1]}`);
+          if (ys.length >= 2 && ys[ys.length - 1] - ys[0] >= 1) sent.push(T.period(ys[0], ys[ys.length - 1]));
         }
-        const skip = new Set([label, subject].filter(Boolean).map(x => x.toLowerCase()));
-        const nm = a.people.map(p => p.name.replace(/[.,;]+$/, "")).filter(n => n.length > 2 && cnt(n) >= 1 && !skip.has(n.toLowerCase()) && !(label && (label.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(label.toLowerCase())))).slice(0, 5);
-        if (nm.length) extra.push(`**${H[7] || "Noms cités"}** : ${nm.join(", ")}`);
-        introMd = introMd.replace(/\n+$/, "\n") + extra.map(x => "- " + x).join("\n") + (extra.length ? "\n" : "") + "\n";
+        const skip = new Set([introHead.label, subject].filter(Boolean).map(x => x.toLowerCase()));
+        const lb = introHead.label.toLowerCase();
+        const nm = a.people.map(p => p.name.replace(/[.,;]+$/, "")).filter(n => n.length > 2 && cnt(n) >= 1 && !skip.has(n.toLowerCase()) && !lb.includes(n.toLowerCase()) && !n.toLowerCase().includes(lb)).slice(0, 4);
+        if (nm.length) sent.push(T.names(nm.map(n => "**" + n + "**").join(", ")));
+        const words = pages.map(p => (p && p.text) || "").join(" ").split(/\s+/).filter(Boolean).length;
+        if (words >= 120) sent.push(T.size(Math.round(words / 10) * 10, pages.length));
+        const lead = introHead.bio ? T.id + introHead.text.replace(/[.;:\s]+$/, "") + "." : T.start + introHead.text;
+        introMd = "## " + (H[5] || "Présentation") + "\n" + sent.join(" ") + "\n\n" + lead + "\n\n";
       }
     }
 
@@ -1418,7 +1430,7 @@ const nativeCache = new Map();
 function nativeFiche(b, key, ps) {
   const ck = b.id + "|" + key + "|" + aiSig(ps) + "|" + S.len + "|" + S.outLang;
   if (nativeCache.has(ck)) return nativeCache.get(ck);
-  const opts = { lang: anaLang(b), len: S.len, h: OUT[S.outLang].h, noPages: key.startsWith("page:"), byPage: key.startsWith("ch:") && ps.length > 1 };
+  const opts = { lang: anaLang(b), out: S.outLang, len: S.len, h: OUT[S.outLang].h, noPages: key.startsWith("page:"), byPage: key.startsWith("ch:") && ps.length > 1 };
   if (key === "doc") {
     const chs = chapters(b), gs = [];
     chs.forEach(c => { const pis = ps.map((p, i) => p.chapterId === c.id ? i : -1).filter(i => i >= 0); if (pis.length) gs.push({ title: c.title, pis }); });
