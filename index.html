@@ -885,6 +885,17 @@ const Analyse = (() => {
         if (rows.length > 5) { const st = (rows.length - 1) / 4; rows = [0, 1, 2, 3, 4].map(i => rows[Math.round(i * st)]); }
         chrono.push({ name: e.name, rows: rows.map(r => r.t) });
       }
+      if (!chrono.length) {
+        const seenY = new Set(), all = [];
+        for (const it of its) {
+          const ym = it.s.match(YR); if (!ym || /^d{3,4}[)]]/.test(it.s) || seenY.has(ym[1]) || ym.index > 70 || it.s.split(/\s+/).length < 8 || it.s.length > 260) continue;
+          const sr = PRONS.test(it.s) ? null : it.s; if (!sr) continue;
+          seenY.add(ym[1]);
+          all.push({ y: ym[1], t: cap(shorten(unlead(sr), 150).replace(ym[1], "**" + ym[1] + "**")) + ref(it.page) });
+        }
+        all.sort((x, y) => +x.y - +y.y);
+        if (all.length >= 4) { let rows = all; if (rows.length > 6) { const st = (rows.length - 1) / 5; rows = [0, 1, 2, 3, 4, 5].map(i => all[Math.round(i * st)]); } chrono.push({ name: "", timeline: true, rows: rows.map(r => r.t) }); }
+      }
     }
 
     // Phrases d'annonce préconçues devant chaque section, dans la langue de sortie.
@@ -935,9 +946,10 @@ const Analyse = (() => {
       parts.forEach((p, pi) => { mdx += "### " + (p.title || "…") + p.span + "\n" + p.intro + "\n" + p.lines.map(l => "- " + l).join("\n") + "\n"; });
     }
     if (chrono.length) {
-      const HQ = { fra: ["Qui, quand, quoi", "Voici ce que le texte dit de chacun, dans l'ordre du temps :"], eng: ["Who, when, what", "Here is what the text says about each, in order of time:"], spa: ["Quién, cuándo, qué", "Esto es lo que el texto dice de cada uno, en orden cronológico:"], ita: ["Chi, quando, che cosa", "Ecco che cosa dice il testo di ciascuno, in ordine di tempo:"], deu: ["Wer, wann, was", "Das sagt der Text über jeden, in zeitlicher Reihenfolge:"] }[opts.out] || ["Qui, quand, quoi", "Voici ce que le texte dit de chacun, dans l'ordre du temps :"];
+      const TL = { fra: ["Chronologie", "Voici les repères du texte, dans l'ordre du temps :"], eng: ["Timeline", "Here are the text's landmarks, in order of time:"], spa: ["Cronología", "Estos son los hitos del texto, en orden cronológico:"], ita: ["Cronologia", "Ecco i punti di riferimento del testo, in ordine di tempo:"], deu: ["Zeitleiste", "Das sind die Eckpunkte des Textes in zeitlicher Reihenfolge:"] };
+      const HQ = chrono[0].timeline ? (TL[opts.out] || TL.fra) : { fra: ["Qui, quand, quoi", "Voici ce que le texte dit de chacun, dans l'ordre du temps :"], eng: ["Who, when, what", "Here is what the text says about each, in order of time:"], spa: ["Quién, cuándo, qué", "Esto es lo que el texto dice de cada uno, en orden cronológico:"], ita: ["Chi, quando, che cosa", "Ecco che cosa dice il testo di ciascuno, in ordine di tempo:"], deu: ["Wer, wann, was", "Das sagt der Text über jeden, in zeitlicher Reihenfolge:"] }[opts.out] || ["Qui, quand, quoi", "Voici ce que le texte dit de chacun, dans l'ordre du temps :"];
       mdx += "\n## " + HQ[0] + "\n" + HQ[1] + "\n";
-      for (const c of chrono) mdx += "### " + c.name + "\n" + c.rows.map(r => "- " + r).join("\n") + "\n";
+      for (const c of chrono) mdx += (c.name ? "### " + c.name + "\n" : "") + c.rows.map(r => "- " + r).join("\n") + "\n";
     }
     if (facts.length) mdx += "\n## " + H[2] + "\n" + LL.facts + "\n" + facts.map(f => "- " + f).join("\n") + "\n";
     if (byPage.length) mdx += "\n## " + H[4] + "\n" + LL.pages + "\n" + byPage.map(f => "- " + f).join("\n") + "\n";
@@ -1127,7 +1139,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1526"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1541"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
