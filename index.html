@@ -844,18 +844,33 @@ const Analyse = (() => {
         if (i >= 0 && head.test(t) && t.replace(head, "").length > 20) body = t.replace(head, "");
         else {
           // formule de date au milieu : « …fixa en 1439 la date » -> on retire seulement « en 1439 »
-          const mid = new RegExp("\\s*,?\\s*\\b(?:in|en|im|nel|vers|around|about|since|depuis|by|on|le|au)\\s+(?:\\d{1,2}(?:er|st|nd|rd|th)?\\s+)?(?:(?:" + MONTHS + ")\\s+)?" + y + "\\b\\s*,?", "i");
+          const mid = new RegExp("(?<![:(\\-–])\\s*,?\\s*\\b(?:in|en|im|nel|vers|around|about|since|depuis|by)\\s+" + y + "\\b\\s*,?", "i");
           body = mid.test(t) && !new RegExp(y + "\\s*(?:et|and|und|y|e|[-–])\\s*\\d{2,4}").test(t) ? t.replace(mid, " ").replace(/\s+/g, " ").trim() : t;
         }
         body = body.replace(/^[,;:\s]+/, "").replace(/^(?:and|et|but|mais|then|puis|ainsi|thus|so|alors|however|néanmoins)\b,?\s*/i, "");
         body = unlead(body);
-        // coupe propre : à une virgule, un point-virgule ou une relative, jamais en plein milieu
-        if (body.length > 175) {
-          const cut = body.slice(0, 175);
-          const k = Math.max(cut.lastIndexOf(", "), cut.lastIndexOf("; "), cut.lastIndexOf(" : "), cut.search(/\s(?:which|that|where|who|dont|où|qui|que|auquel|laquelle)\s[^]*$/));
-          body = k > 90 ? body.slice(0, k) : shorten0(body, 175);
-          body = trimTail(body.replace(/[,;:\s]+$/, ""));
+        // coupe propre : on garde la phrase entière si elle est raisonnable ; sinon on s'arrête à une fin de proposition complète
+        if (body.length > 240) {
+          const REL = /^(?:which|that|who|whom|whose|where|when|while|although|though|because|and|or|but|dans lequel|dans laquelle|lequel|laquelle|auquel|dont|où|qui|que|et|ou|mais|alors que|tandis que|puisque|bien que|y|o|pero|und|oder|aber|e|ma|dove|che|cui)\b/i;
+          const DANGLE = /\s(?:avant|après|puis|ensuite|enfin|before|after|then|also|que|qu'|dans|sur|pour|par|vers|avec|sans|contre|entre|chez|as|if|quand|lorsque|si|comme|ainsi|declared|déclare|déclarant|said|dit|says|affirme|affirms|stated|déclaré|that|which)$/i;
+          let out = "";
+          const ends = [];
+          for (let i = 60; i < Math.min(body.length, 240); i++) if (/[,;]/.test(body[i]) && body[i + 1] === " ") ends.push(i);
+          for (const i of ends.reverse()) {
+            const kept = body.slice(0, i).replace(/[,;:\s]+$/, "");
+            const lastClause = kept.slice(Math.max(kept.lastIndexOf(",") + 1, kept.lastIndexOf(";") + 1)).trim();
+            const quotes = (kept.match(/[«“"]/g) || []).length + (kept.match(/[»”]/g) || []).length;
+            const open = (kept.match(/\(/g) || []).length - (kept.match(/\)/g) || []).length;
+            if (lastClause.split(/\s+/).length < 4 || REL.test(lastClause) || DANGLE.test(kept) || TAILW.test(kept) || quotes % 2 || open) continue;
+            out = kept; break;
+          }
+          body = out || trimTail(shorten0(body, 240).replace(/[,;:\s]+$/, ""));
         }
+        // citation ouverte et jamais fermée : on s'arrête avant elle (« …Bonaparte, qui déclare : « Citoyens. »)
+        { const op = (body.match(/[«“]/g) || []).length - (body.match(/[»”]/g) || []).length, dq = (body.match(/"/g) || []).length % 2;
+          if (op > 0 || dq) { const i = Math.max(body.lastIndexOf("«"), body.lastIndexOf("“"), dq ? body.lastIndexOf('"') : -1); const c = body.slice(0, i).replace(/[,;:\s]+$/, ""); const k = c.lastIndexOf(", "); body = k > 50 ? c.slice(0, k) : c; } }
+        body = body.replace(/\s*\([^)]*$/, "");
+        if (/\s(?:avant|après|que|qu'|dans|sur|pour|par|avec|sans|before|after|that|which|of|to|and|et|ou|or)[.;:,\s]*$/i.test(body) || body.split(/\s+/).length < 4) return "";
         body = resolve(body);
         body = cap(body).replace(/[.;:,\s]+$/, ""); return /…$/.test(body) ? body : body + ".";
       };
@@ -900,7 +915,8 @@ const Analyse = (() => {
           if (/[\s(,]\p{Lu}/u.test(" " + between.trim()) && /\p{Lu}[\p{L}]+/u.test(between)) continue; }
         if (ag.rows.some(r => r.y === ym[1])) continue;
         const sr = PRONS.test(sn) ? sn.replace(PRONS, ag.name) : sn;
-        ag.rows.push({ y: ym[1], t: "**" + ym[1] + "** : " + eventText(sr, ym[1]) + ref(it.page), imp: it.imp });
+        const ev = eventText(sr, ym[1]); if (!ev) continue;
+        ag.rows.push({ y: ym[1], t: "**" + ym[1] + "** : " + ev + ref(it.page), imp: it.imp });
       }
       for (const e of ents.filter(x => x.rows.length >= 3).sort((x, y) => y.rows.length - x.rows.length).slice(0, 3)) {
         let rows = e.rows.sort((x, y) => +x.y - +y.y);
@@ -914,7 +930,8 @@ const Analyse = (() => {
           const ym = it.s.match(YR); if (!ym || /^\d{3,4}[)\]]/.test(it.s) || seenY.has(ym[1]) || ym.index > 140 || it.s.split(/\s+/).length < 8 || it.s.length > 320) continue;
           const sr = PRONS.test(it.s) ? null : it.s; if (!sr) continue;
           seenY.add(ym[1]);
-          all.push({ y: ym[1], t: "**" + ym[1] + "** : " + eventText(sr, ym[1]) + ref(it.page), imp: it.imp });
+          const ev = eventText(sr, ym[1]); if (!ev) continue;
+          all.push({ y: ym[1], t: "**" + ym[1] + "** : " + ev + ref(it.page), imp: it.imp });
         }
         // beaucoup de dates : on en donne davantage, les plus importantes, dans l'ordre du temps
         const maxRows = all.length >= 14 ? 10 : 6;
@@ -1169,7 +1186,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1641"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1642"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
