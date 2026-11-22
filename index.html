@@ -608,8 +608,20 @@ const Analyse = (() => {
         const T = TPL || { about: x => "Ce texte parle de **" + x + "**.", bio: x => "Ce texte présente **" + x + "**.", start: "Il commence ainsi : ", id: "En quelques mots : ", period: (p, q) => "Il couvre la période de " + p + " à " + q + ".", names: l => "Il cite notamment " + l + ".", size: (w, n) => "Il compte environ " + w + " mots" + (n > 1 ? ", sur " + n + " pages" : "") + "." };
         const sent = [introHead.bio ? T.bio(introHead.label) : T.about(introHead.label)];
         if (!introHead.bio) {
+          // Lecture « humaine » : la période est celle que le texte attribue lui-même au sujet (« la Révolution (1789-1799) », « de 1789 à 1799 »).
+          const Y = "(1[0-9]{3}|20[0-9]{2})";
+          const RNG = new RegExp(Y + "\s*[-–—]\s*" + Y + "|\b(?:de|from|entre|between|von|desde|dal|del)\s+" + Y + "\s+(?:à|au|to|et|and|bis|a|al|y|und|hasta)\s+" + Y, "gi");
+          const lab = introHead.label.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+          const own = new Map();
+          pages.map(p => (p && p.text) || "").join(" ").split(/(?<=[.!?])\s+/).forEach(sn => {
+            const low = sn.toLowerCase();
+            if (!lab.length || !lab.every(w => low.includes(w))) return;
+            for (const m of sn.matchAll(RNG)) { const lo = +(m[1] || m[3]), hi = +(m[2] || m[4]); if (hi > lo && hi - lo < 400) { const k = lo + "-" + hi; own.set(k, (own.get(k) || 0) + 1); } }
+          });
+          const bestOwn = [...own.entries()].sort((x, y) => y[1] - x[1])[0];
+          if (bestOwn) { const [lo, hi] = bestOwn[0].split("-").map(Number); sent.push(T.period(lo, hi)); } else {
           const all = (pages.map(p => (p && p.text) || "").join(" ").match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/g) || []).map(Number).sort((x, y) => x - y);
-          if (all.length >= 2) { const cut = Math.floor(all.length * 0.05), lo = all[cut], hi = all[all.length - 1 - cut]; if (hi - lo >= 1) sent.push(T.period(lo, hi)); }
+          if (all.length >= 2) { const cut = Math.floor(all.length * 0.05), lo = all[cut], hi = all[all.length - 1 - cut]; if (hi - lo >= 1) sent.push(T.period(lo, hi)); } }
         }
         const skip = new Set([introHead.label, subject].filter(Boolean).map(x => x.toLowerCase()));
         const lb = introHead.label.toLowerCase();
@@ -1036,7 +1048,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1518"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1520"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
