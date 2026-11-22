@@ -690,7 +690,29 @@ const Analyse = (() => {
       for (const [t, sc] of top) { if (pick.length >= 2) break; if (pick.length && sc < 0.6 * top[0][1]) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
       return pick.length ? pick.join(" · ") : "";
     };
+    // Titre « lu » : le groupe nominal sujet de la phrase la plus centrale de la partie (« Le tabernacle », « Le saint chrême »)
+    const npTitle = sg => {
+      const STOP = /^(?:est|sont|doit|doivent|peut|peuvent|a|ont|fut|étaient|était|sera|seront|ne|n'|se|s'|qui|que|qu'|dont|où|mais|et|ou|car|donc|puisque|lorsque|quand|comme|si|il|elle|ils|elles|on|nous|vous|signifient|font|fait|rend|rendent|reste|restent|devient|deviennent|commence|commencent|constitue|constituent)$/i;
+      const cands = [...sg.items].sort((x, y) => x.k - y.k).slice(0, 4);
+      for (const it of cands) {
+        const ws = it.s.replace(/^[«"“\s]+/, "").replace(/\([^)]*\)/g, "").split(/\s+/);
+        const np = [];
+        for (let w of ws) {
+          const core = w.replace(/[,;:.!?»"”]+$/, "");
+          if (!core || STOP.test(core.replace(/^[ldLD]['’]/, "")) && np.length) break;
+          if (/^\p{L}{4,}ent$/u.test(core) && !/ment$/.test(core) && np.length >= 2) break;
+          np.push(core);
+          if (/[,;:.!?»”]$/.test(w) || np.length >= 6) break;
+        }
+        while (np.length && /^(?:de|du|des|d'|d’|le|la|les|l'|l’|un|une|à|au|aux|en|dans|sur|par|pour|avec|sans)$/i.test(np[np.length - 1])) np.pop();
+        if (np.length < 2 || np.length > 6 || /^(?:il|elle|ils|elles|on|ce|cela|ceci|nous|vous|je|tu|en|dans|sur|pour|par|lorsque|quand|si)$/i.test(np[0]) || !/^\p{Lu}/u.test(np[0])) continue;
+        let t = np.join(" ").replace(/^Ces /, "Les ").replace(/^Cette /, "La ").replace(/^Cet /, "L'").replace(/^Ce /, "Le ");
+        return cap(t);
+      }
+      return "";
+    };
     const titleOf = sg => {
+      if (thematic && /^fr/.test(opts.out || "fra") && segs.length > 1) { const tt = npTitle(sg); if (tt) return tt; }
       const nt = segs.length > 1 ? nameTitle(sg) : ""; if (nt) return nt;
       const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
       const top = [...f.entries()].filter(([t]) => t.length >= 3 && !/^(?:first|second|third|fourth|fifth|last|next|new|old|premier|première|second|dernier|ancien|nouveau|primero|segundo|erste|zweite)$/i.test(form(t)) && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) && !thematic ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
