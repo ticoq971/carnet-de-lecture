@@ -1319,6 +1319,11 @@ function nativeFiche(b, key, ps) {
   nativeCache.set(ck, out);
   return out;
 }
+const shareTxt = {};
+function shareBar(b, key, text) {
+  shareTxt[key] = { title: b.title, text: String(text || "").replace(/\*\*/g, "").replace(/^#{1,6}\s*/gm, "").trim() };
+  return `<div class="row small"><button class="small primary" data-a="share" data-id="${esc(key)}">Partager la fiche</button><button class="small" data-a="copyfiche" data-id="${esc(key)}">Copier le texte</button></div>`;
+}
 function vAI(b, key, ps) {
   const st = (S.ai[b.id] || {})[fk(key)];
   const run = S.aiRun && S.aiRun.bid === b.id && S.aiRun.key === key;
@@ -1329,7 +1334,7 @@ function vAI(b, key, ps) {
   const mode = st && S.ficheMode[key] !== "native" ? "ai" : "native";
   const tabs = st ? `<div class="row small" role="group" aria-label="Type de fiche"><button class="small ${mode === "native" ? "primary" : ""}" data-a="fmode" data-m="native" data-id="${key}" aria-pressed="${mode === "native"}">Fiche intégrée</button><button class="small ${mode === "ai" ? "primary" : ""}" data-a="fmode" data-m="ai" data-id="${key}" aria-pressed="${mode === "ai"}">Fiche rédigée par l'IA</button></div>` : "";
   const chainNote = S.chain && multi ? `<p class="banner">${esc(S.chain.label)} : rédaction des fiches par l'IA en cours, page par page. Faites défiler pour les voir apparaître.</p>` : "";
-  if (mode === "ai") return `<div class="ai">${tabs}${chainNote}<div class="fiche">${md(st.text)}</div><div class="row small muted">Rédigée par l'IA sur votre appareil · ${esc(LEN[st.len]?.label || "")}${st.sig !== aiSig(ps) ? ` · <b class="warn-t">des pages ont changé depuis</b>` : ""}<button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>Refaire</button></div></div>`;
+  if (mode === "ai") return `<div class="ai">${tabs}${chainNote}<div class="fiche">${md(st.text)}</div>${shareBar(b, key, st.text)}<div class="row small muted">Rédigée par l'IA sur votre appareil · ${esc(LEN[st.len]?.label || "")}${st.sig !== aiSig(ps) ? ` · <b class="warn-t">des pages ont changé depuis</b>` : ""}<button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>Refaire</button></div></div>`;
   const nat = nativeFiche(b, key, ps);
   const chainBtn = multi ? `<button class="small" data-a="aichain" data-id="${key}" ${busy ? "disabled" : ""}>${key === "doc" ? `Chaque page, chaque ${W(b).one}, puis le document` : `Chaque page, puis ${W(b).the}`}</button>` : "";
   const ciLine = ci && ci.done ? `<span class="muted small">${ci.done} ${ci.unit} sur ${ci.total} ${ci.done > 1 ? "ont" : "a"} déjà leur fiche IA</span>` : "";
@@ -1339,6 +1344,7 @@ function vAI(b, key, ps) {
       <div class="row small" style="margin-top:8px"><button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>${multi ? "Fiche IA directe" : "Rédiger avec l'IA"}</button>${chainBtn}${ciLine}</div>
       <p class="muted small">L'IA réécrit la fiche avec ses propres phrases. C'est plus lent (une à plusieurs minutes) et ${IA.engine ? "elle est déjà chargée." : `elle se télécharge la première fois (≈${(MODELS[S.model] || MODELS.leger).size}), puis reste sur l'appareil.`} Rien n'est envoyé sur internet.</p>${vModelPick()}</details>`;
   return `<div class="ai">${tabs}${chainNote}<div class="fiche">${nat ? md(nat) : `<p class="muted">Pas assez de texte lisible pour une fiche. Vérifiez le texte des pages (bouton « Corriger le texte »).</p>`}</div>
+    ${nat ? shareBar(b, key, nat) : ""}
     <p class="muted small">Fiche intégrée : faite à l'instant sur votre appareil avec les phrases du texte, sans IA ni téléchargement.${S.outLang !== "fra" || (anaLang(b) && anaLang(b) !== "fra") ? " Les phrases restent dans la langue du texte ; pour une autre langue, utilisez la traduction ou la fiche IA." : ""}</p>
     ${aiOpt}</div>`;
 }
@@ -1573,6 +1579,14 @@ app.addEventListener("click", async e => {
   switch (a) {
     case "airun": S.ficheMode[id] = "ai"; runAI(id); break;
     case "fmode": S.ficheMode[id] = t.dataset.m; render(); break;
+    case "share": case "copyfiche": {
+      const x = shareTxt[id]; if (!x) break;
+      const full = x.title + "\n\n" + x.text;
+      if (a === "share" && navigator.share) { try { await navigator.share({ title: x.title, text: full }); } catch {} break; }
+      try { await navigator.clipboard.writeText(full); toast(a === "share" ? "Partage indisponible ici : fiche copiée, collez-la où vous voulez." : "Fiche copiée."); }
+      catch { const ta = document.createElement("textarea"); ta.value = full; document.body.append(ta); ta.select(); try { document.execCommand("copy"); toast("Fiche copiée."); } catch { toast("Copie impossible."); } ta.remove(); }
+      break;
+    }
     case "aichain": runChain(id); break;
     case "trrun": runTranslate(id); break;
     case "checkupd": Updates.check(true); break;
