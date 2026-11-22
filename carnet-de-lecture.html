@@ -769,7 +769,7 @@ const aiErr = e => e?.why === "claude" ? "La fiche par IA marche sur le site Git
   : e?.code === "stop" ? "Fiche arrêtée."
   : "L'IA n'a pas pu terminer : " + (e?.message || String(e)).slice(0, 160) + ". Si l'appareil manque de mémoire, choisissez le modèle Léger.";
 
-const SYS = "Tu rédiges des fiches de synthèse en français, claires, logiques et hiérarchisées, comme un excellent assistant de révision. Avant d'écrire, comprends le texte : son sujet, qui parle, ce qui est affirmé, et la logique qui relie les idées (chronologie, cause et conséquence, argument et exemple). Ensuite, organise la fiche selon cette logique. Tu peux reprendre les mots du texte quand ils sont justes, mais tu ne recopies pas des phrases entières au hasard : tu sélectionnes, tu regroupes et tu mets en avant l'essentiel. Tu n'ajoutes aucune information qui n'est pas dans le texte et tu n'oublies aucun élément important.";
+const SYS = "Tu rédiges des fiches de synthèse en français, claires, logiques et hiérarchisées, comme un excellent assistant de révision. Avant d'écrire, comprends le texte : son sujet, qui parle, ce qui est affirmé, et la logique qui relie les idées (chronologie, cause et conséquence, argument et exemple). Ensuite, organise la fiche selon cette logique. Tu peux reprendre les mots du texte quand ils sont justes, mais tu ne recopies pas des phrases entières au hasard : tu sélectionnes, tu regroupes et tu mets en avant l'essentiel. Tu n'ajoutes aucune information qui n'est pas dans le texte et tu n'oublies aucun élément important. Le texte vient souvent d'une lecture automatique de photo : devine les mots mal lus d'après le contexte, et ne reproduis jamais un mot ou un passage incompréhensible. Ne recopie jamais une phrase entière du texte.";
 const LENP = { court: ["courte (environ 120 mots, 2 ou 3 parties)", 520], moyen: ["moyenne (environ 250 mots, 3 ou 4 parties)", 850], long: ["détaillée (environ 450 mots, 4 ou 5 parties avec plus de détails)", 1300] };
 function docLine(b) { return `Document : ${typeOf(b)[1].toLowerCase()} « ${b.title} »${b.author ? " de " + b.author : ""}${b.publisher ? " (" + b.publisher + ")" : ""}.${b.notes ? " Note du lecteur : " + b.notes : ""}`; }
 function chunkPages(ps, max) {
@@ -1042,7 +1042,17 @@ async function runPhotos() {
     try {
       const canvas = await loadImage(q.file);
       S.ocrStatus = `Photo ${idx + 1} sur ${todo.length} : lecture…`; paintProgress();
-      const { data } = await worker.recognize(canvas, { rotateAuto: true });
+      let { data } = await worker.recognize(canvas, { rotateAuto: true });
+      // Si la page est dans une autre langue que celle réglée, on ajoute cette langue et on relit la photo.
+      const det = Analyse.detectLang(String(data?.text || ""));
+      if (det && !bookLangs(b).includes(det) && LANGS.some(l => l[0] === det) && (data?.text || "").length > 80) {
+        b.langs = [...bookLangs(b), det]; saveBookSafe(b);
+        S.ocrStatus = `Photo ${idx + 1} : texte en ${langName(det).toLowerCase()} détecté, nouvelle lecture…`; paintProgress();
+        toast(`Texte en ${langName(det).toLowerCase()} détecté : langue ajoutée au document.`);
+        worker = await OCR.get(bookLangs(b));
+        const again = (await worker.recognize(canvas, { rotateAuto: true })).data;
+        if ((again?.confidence ?? 0) >= (data?.confidence ?? 0)) data = again;
+      }
       const raw = String(data?.text || "").trim();
       const letters = (raw.match(/\p{L}/gu) || []).length;
       if (letters < 20) throw { msg: `Presque aucun texte reconnu${data?.confidence != null ? " (confiance " + Math.round(data.confidence) + " %)" : ""}. Reprenez la photo plus près, bien à plat et éclairée, ou vérifiez la langue du livre.` };
