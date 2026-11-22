@@ -66,6 +66,7 @@
 .fiche .chip{vertical-align:2px}
 .warn-t{color:var(--warn)}
 details.reperes>summary{padding:8px 0}
+details.aiopt{border-top:1px solid var(--line);padding-top:6px}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;
   padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 60px}
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
@@ -383,7 +384,283 @@ const Analyse = (() => {
     return a.items.map(it => { const set = new Set(it.t); let sc = 0, hit = 0; qt.forEach(t => { if (set.has(t)) { sc += Math.log(1 + N / (df.get(t) || 1)); hit++; } else if ([...set].some(x => x.length > 4 && (x.startsWith(t) || t.startsWith(x)))) sc += 0.5; }); if (qy.length && qy.some(d => it.s.includes(d))) sc += 2; return { s: it.s, page: it.page, score: hit ? sc * (hit / qt.length + 0.5) : sc * 0.3 }; })
       .filter(x => x.score > 0.4).sort((a, b) => b.score - a.score).slice(0, 5);
   }
-  return { analyse, parsePage, search, detectLang, datesIn, sentences };
+
+  /* ---------- Fiche de synthèse intégrée (sans IA) ----------
+     Choisit les phrases qui portent le texte, écarte le charabia de la lecture photo,
+     découpe le texte en grandes parties selon les changements de sujet, et met en forme
+     avec les mots du texte : parties numérotées, mots-clés surlignés, chiffres et dates, « À retenir ». */
+  const LEAD = /^(?:mais|et|or|donc|ainsi|alors|puis|cependant|pourtant|toutefois|en effet|de plus|par ailleurs|aussi|d'ailleurs|but|and|so|however|yet|also|then|thus|moreover|furthermore|indeed|besides|pero|y|sin embargo|además|entonces|así|ma|e|però|tuttavia|inoltre|quindi|aber|und|doch|jedoch|auch|dann|außerdem|sed|autem|enim|tamen|igitur|ergo|nam|itaque|δε|δὲ|και|καὶ|αλλά|ἀλλὰ|όμως)\b\s*,?\s*/iu;
+  const PRON = /^(?:il|elle|ils|elles|ce|cela|ceci|ces|cette|celui|celle|ceux|on|lui|he|she|it|they|this|these|that|those|él|ella|ellos|ellas|esto|eso|ese|esa|egli|ella|esso|essa|questo|questa|ciò|er|sie|es|dies|diese|dieser|dieses|is|ea|id|hic|haec|hoc|ille|illa|αυτός|αυτή|αυτό|οὗτος|αὕτη|τοῦτο)\b/iu;
+  const CONCL = /\b(en conclusion|en somme|en résumé|finalement|au final|bref|c'est pourquoi|retenons|il faut retenir|in conclusion|in short|overall|finally|to sum up|en resumen|en conclusión|por eso|in conclusione|insomma|perciò|zusammenfassend|schließlich|deshalb|igitur|ergo|itaque|denique|συνεπώς|επομένως|τέλος|ἄρα)\b/iu;
+  const VOW = /[aeiouyàâäéèêëîïôöùûüáíóúαεηιουω]/g;
+
+  // Proportion de mots « normaux » : sert à écarter les phrases mal lues par l'OCR.
+  function quality(s) {
+    const toks = s.split(/\s+/).filter(Boolean);
+    if (toks.length < 4) return 0;
+    let bad = 0, sw = 0;
+    for (const t of toks) {
+      const w = t.replace(/^[«"“„'‘(\[¿¡]+|[»"”'’),.;:!?…\]·]+$/g, "");
+      if (!w || /^\d+(?:[.,]\d+)*%?$/.test(w) || /^[—–-]$/.test(w)) continue;
+      if (!/^[\p{L}][\p{L}\p{M}'’\-]*$/u.test(w)) { bad++; continue; }
+      const n = norm(w);
+      if (ALLSTOP.has(n)) { sw++; continue; }
+      if (n.length === 1) { bad += 0.6; continue; }
+      const v = (n.match(VOW) || []).length;
+      if (n.length > 3 && v === 0) { bad++; continue; }
+      if (n.length > 5 && v / n.length < 0.18) { bad += 0.7; continue; }
+      if (/(.)\1\1/.test(n) || /\p{Ll}\p{Lu}/u.test(w.slice(1)) || /[\p{L}]\d|\d[\p{L}]/u.test(w)) { bad++; continue; }
+      if (n.length > 22) { bad++; continue; }
+    }
+    const k = toks.length;
+    return Math.max(0, 1 - 2.2 * bad / k) * Math.min(1, 0.35 + 3 * sw / k);
+  }
+  const tidy = s => s.replace(/(^|\s)[|~^_=<>{}\\#*]+(?=\s|$)/g, " ").replace(/\s+([,.)\]])/g, "$1").replace(/([(\[])\s+/g, "$1").replace(/\s{2,}/g, " ").trim();
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  function shorten(s, max) {
+    let t = s.replace(/\s*\((?![^()]*\d)[^()]{0,120}\)/g, "").replace(/\s+[—–]\s+[^—–.]{3,90}\s+[—–]\s+/g, " ");
+    if (t.length <= max) return t;
+    const cut = t.slice(0, max);
+    const i = Math.max(cut.lastIndexOf(", "), cut.lastIndexOf("; "), cut.lastIndexOf(" : "), cut.lastIndexOf(" – "), cut.lastIndexOf(" — "));
+    if (i > max * 0.5) return t.slice(0, i).trim() + "…";
+    return cut.replace(/\s+\S*$/, "").replace(/[,;:]$/, "") + "…";
+  }
+  const unlead = s => { const t = s.replace(LEAD, ""); return t.length > 15 && t !== s ? cap(t) : s; };
+
+  function fiche(pages, opts = {}) {
+    const H = opts.h || ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page"];
+    const P = { court: { parts: 2, per: 1, bref: 1, keep: 2, max: 170, facts: 4 }, moyen: { parts: 4, per: 2, bref: 2, keep: 3, max: 230, facts: 7 }, long: { parts: 6, per: 3, bref: 3, keep: 4, max: 320, facts: 12 } }[opts.len] || { parts: 4, per: 2, bref: 2, keep: 3, max: 230, facts: 7 };
+    const a = analyse(pages, { lang: opts.lang });
+    const ref = pg => opts.noPages || !pg || pg === "?" ? "" : ` (p. ${pg})`;
+    const its = a.items.map(it => ({ ...it, s: tidy(it.s) })).map(it => ({ ...it, q: quality(it.s) })).filter(it => it.q >= 0.45 && it.t.length >= 3);
+    its.forEach((it, i) => it.k = i);
+    const N = its.length;
+    if (!N) return null;
+
+    // Importance d'une phrase : centralité (TextRank) + mots du sujet + indices de position.
+    const sets = its.map(it => new Set(it.t));
+    let tr = its.map(() => 1);
+    if (N > 2 && N <= 450) {
+      const nb = its.map(() => []);
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        let c = 0; for (const x of sets[i]) if (sets[j].has(x)) c++;
+        if (!c) continue;
+        const w = c / (Math.log(sets[i].size + 1) + Math.log(sets[j].size + 1));
+        nb[i].push([j, w]); nb[j].push([i, w]);
+      }
+      const out = nb.map(l => l.reduce((s, x) => s + x[1], 0) || 1);
+      for (let r = 0; r < 25; r++) tr = tr.map((_, i) => 0.15 + 0.85 * nb[i].reduce((s, [j, w]) => s + tr[j] * w / out[j], 0));
+    }
+    const mx = (arr) => Math.max(...arr, 1e-9);
+    const trM = mx(tr), scM = mx(its.map(it => it.score));
+    its.forEach((it, i) => {
+      let s = 0.55 * tr[i] / trM + 0.45 * it.score / scM;
+      if (PRON.test(it.s) && !(i && its[i - 1].pi === it.pi)) s *= 0.75; else if (PRON.test(it.s)) s *= 0.88;
+      if (it.s.length > 380) s *= 0.75;
+      if (it.s.length < 45) s *= 0.8;
+      it.imp = s * (0.6 + 0.4 * it.q);
+    });
+
+    // Mots-clés du passage : ceux qui reviennent dans plusieurs phrases (hors noms propres très courts).
+    const df = new Map(); sets.forEach(st => st.forEach(t => df.set(t, (df.get(t) || 0) + 1)));
+    const surface = new Map();
+    its.forEach(it => words(it.s).forEach(x => { const st = stem(x); if (!df.has(st)) return; const m = surface.get(st) || {}; m[x] = (m[x] || 0) + 1; surface.set(st, m); }));
+    const form = st => { const m = surface.get(st); if (!m) return st; const e = Object.entries(m).sort((x, y) => y[1] - x[1]); const low = e.find(([w]) => w === w.toLowerCase()); return (low && low[1] * 2 >= e[0][1] ? low[0] : e[0][0]); };
+    // un mot souvent précédé d'un article est un nom : il fait un meilleur mot-clé et un meilleur titre
+    const nameStem = new Set(a.people.slice(0, 10).flatMap(p => p.name.split(/\s+/).map(stem)));
+    const DET = new Set("le la les l un une des du ce cet cette ces son sa ses leur leurs mon ma notre votre the a an this these its his her their our el los las una del al lo gli i uno della dei delle degli der die das den dem des ein eine einen einem einer ο η το οι τα του της των τον την".split(" "));
+    const LINK = new Set("de d du des a à au aux en et of the and in di del della dello y e von der vom zur zum".split(" "));
+    const MON = new RegExp("^(" + MONTHS + ")$", "i");
+    const nounish = new Map();
+    its.forEach(it => { const ws = it.s.match(/[\p{L}][\p{L}\p{M}'’\-]*/gu) || []; ws.forEach((x, i) => { const el = x.match(/^([\p{L}]{1,2})['’](.+)$/u); const st = stem(el ? el[2] : x); const o = nounish.get(st) || [0, 0]; o[1]++; if ((el && DET.has(norm(el[1]))) || (i && DET.has(norm(ws[i - 1])))) o[0]++; nounish.set(st, o); }); });
+    const nn = t => { const o = nounish.get(t); return o ? o[0] / o[1] : 0; };
+    const keyTerms = new Set([...df.entries()].filter(([t, f]) => f >= 2 && t.length >= 4 && (nn(t) >= 0.25 || nameStem.has(t))).sort((x, y) => y[1] - x[1]).slice(0, Math.max(6, Math.min(18, Math.round(N / 3)))).map(x => x[0]));
+    const nameSet = new Set(a.people.slice(0, 10).flatMap(p => p.name.split(/\s+/).filter(w => w.length > 2 && /^\p{Lu}/u.test(w))));
+    const bold = (s, max = 3) => {
+      let n = 0, last = -9; const seen = new Set();
+      let out = s.replace(/[\p{L}][\p{L}\p{M}'’\-]*/gu, (w, off) => {
+        const m = w.match(/^([\p{L}]{1,2}['’])(.+)$/u); const pre = m ? m[1] : "", core = m ? m[2] : w;
+        const st = stem(core);
+        // la suite d'un nom déjà surligné (« Johannes Gutenberg ») ne compte pas en plus
+        if (/^\p{Lu}/u.test(w) && nameSet.has(w) && last > 0 && /^\s+$/.test(s.slice(last, off))) { last = off + w.length; seen.add(st); return "**" + w + "**"; }
+        if (n >= max) return w;
+        if ((keyTerms.has(st) || nameSet.has(core)) && !seen.has(st) && core.length > 3) { seen.add(st); n++; last = off + w.length; return pre + "**" + core + "**"; }
+        return w;
+      });
+      return out.replace(/\*\*(\s+)\*\*/g, "$1");
+    };
+    const line = (it, max = P.max) => bold(shorten(unlead(it.s), max)) + ref(it.page);
+
+    const used = new Set();
+    const jac = (x, y) => { let c = 0; for (const t of sets[x.k]) if (sets[y.k].has(t)) c++; return c / Math.max(1, sets[x.k].size + sets[y.k].size - c); };
+    const take = (list, k, bonus = () => 1) => {
+      const out = [];
+      for (const it of [...list].sort((x, y) => y.imp * bonus(y) - x.imp * bonus(x))) {
+        if (out.length >= k) break;
+        if (used.has(it.k) || [...used].some(u => jac(its[u], it) > 0.45)) continue;
+        used.add(it.k); out.push(it);
+      }
+      return out.sort((x, y) => x.k - y.k);
+    };
+
+    // 1. En bref : les phrases les plus centrales, le début du texte un peu favorisé.
+    const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => it.k < 3 ? 1.25 : 1);
+
+    // 2. Les grandes parties : groupes donnés (chapitres) ou découpage aux changements de sujet.
+    let segs;
+    if (opts.groups && opts.groups.length > 1) {
+      const pid = new Map(); opts.groups.forEach((g, gi) => g.pis.forEach(pi => pid.set(pi, gi)));
+      segs = opts.groups.map((g, gi) => ({ title: g.title, items: its.filter(it => pid.get(it.pi) === gi) })).filter(s => s.items.length);
+    } else {
+      const k = Math.max(1, Math.min(P.parts, Math.floor(N / 3)));
+      const cuts = [];
+      if (k > 1) {
+        const win = Math.max(2, Math.min(5, Math.round(N / (k * 2))));
+        const gaps = [];
+        for (let g = 1; g < N; g++) {
+          const A = new Map(), B = new Map();
+          its.slice(Math.max(0, g - win), g).forEach(it => it.t.forEach(t => A.set(t, (A.get(t) || 0) + 1)));
+          its.slice(g, g + win).forEach(it => it.t.forEach(t => B.set(t, (B.get(t) || 0) + 1)));
+          let d = 0, na = 0, nb2 = 0; A.forEach((v, t) => { na += v * v; d += v * (B.get(t) || 0); }); B.forEach(v => nb2 += v * v);
+          let sim = d / (Math.sqrt(na * nb2) || 1);
+          if (its[g].pi !== its[g - 1].pi) sim *= 0.85;
+          gaps.push([g, sim]);
+        }
+        const minSeg = Math.max(2, Math.floor(N / (k * 2.5)));
+        for (const [g] of gaps.sort((x, y) => x[1] - y[1])) {
+          if (cuts.length >= k - 1) break;
+          if (g < minSeg || N - g < minSeg || cuts.some(c => Math.abs(c - g) < minSeg)) continue;
+          cuts.push(g);
+        }
+        cuts.sort((x, y) => x - y);
+      }
+      const bounds = [0, ...cuts, N];
+      segs = bounds.slice(1).map((e, i) => ({ items: its.slice(bounds[i], e) }));
+    }
+    // Titre d'une partie : ses mots les plus caractéristiques, pris dans le texte.
+    const segDf = new Map(); segs.forEach(sg => new Set(sg.items.flatMap(it => it.t)).forEach(t => segDf.set(t, (segDf.get(t) || 0) + 1)));
+    const titleOf = sg => {
+      const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
+      const top = [...f.entries()].filter(([t]) => t.length >= 3 && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
+      if (!top.length) return "";
+      // une expression du texte qui contient les deux premiers mots (ex. « caractères mobiles »)
+      if (top.length > 1) for (const it of sg.items) {
+        const ws = it.s.match(/[\p{L}][\p{L}\p{M}'’\-]*/gu) || [];
+        for (let i = 0; i < ws.length; i++) {
+          if (stem(ws[i].replace(/^[\p{L}]{1,2}['’]/u, "")) !== top[0] && stem(ws[i].replace(/^[\p{L}]{1,2}['’]/u, "")) !== top[1]) continue;
+          for (let j = i + 1; j < Math.min(ws.length, i + 4); j++) {
+            const sj = stem(ws[j].replace(/^[\p{L}]{1,2}['’]/u, ""));
+            if ((sj === top[0] || sj === top[1]) && sj !== stem(ws[i].replace(/^[\p{L}]{1,2}['’]/u, ""))) {
+              const span = ws.slice(i, j + 1);
+              if (span.slice(1, -1).every(w => LINK.has(norm(w))) && !ALLSTOP.has(norm(span[0])) && !LEAD.test(span[0] + " ") && !MON.test(span[0])) return cap(span.join(" ").replace(/^[\p{L}]{1,2}['’]/u, ""));
+            }
+          }
+        }
+      }
+      return cap(top.slice(0, 2).map(form).join(" · "));
+    };
+    const pageSpan = sg => { const pp = [...new Set(sg.items.map(it => it.page).filter(p => p && p !== "?"))]; return opts.noPages || !pp.length ? "" : pp.length === 1 ? ` (p. ${pp[0]})` : ` (p. ${pp[0]}) → (p. ${pp[pp.length - 1]})`; };
+    const parts = segs.map(sg => {
+      const per = opts.groups ? Math.max(1, P.per) : P.per;
+      let ch = take(sg.items, per);
+      if (!ch.length) ch = [...sg.items].sort((x, y) => y.imp - x.imp).slice(0, 1);
+      return { title: sg.title || titleOf(sg), span: opts.groups ? pageSpan(sg) : "", lines: ch.map(it => line(it)) };
+    }).filter(p => p.lines.length);
+
+    // 3. Chiffres, dates et noms (en version courte si la phrase est déjà affichée plus haut)
+    const facts = [];
+    const shown = new Set(used);
+    const isShown = s => its.some(it => shown.has(it.k) && (it.s.includes(s.slice(0, 40)) || s.includes(it.s.slice(0, 40))));
+    const clause = (s, needle) => {
+      const bits = s.split(/(?:[,;:]\s+|\s+[—–]\s+)/); let i = bits.findIndex(b => b.includes(needle)); if (i < 0) return shorten(s, 120);
+      let c = bits[i], j = i;
+      while (c.length < 60 && bits[j + 1]) c += ", " + bits[++j];
+      if (c.length < 30 && i > 0) c = bits[i - 1] + ", " + c;
+      return shorten(unlead(c.trim()), 150);
+    };
+    // quelques mots autour de la date ou du chiffre
+    const shortAround = (c, needle) => {
+      const i = c.indexOf(needle); if (i < 0 || c.length <= 50) return c;
+      const bw = c.slice(0, i).split(/\s+/).filter(Boolean), aw = c.slice(i + needle.length).split(/\s+/).filter(Boolean);
+      const before = bw.slice(-4).join(" "), after = aw.slice(0, 11).join(" ");
+      return ((bw.length > 4 ? "… " : "") + before + " " + needle + " " + after).trim().replace(/\s+([.,;:])/g, "$1").replace(/[,;:]$/, "") + (aw.length > 11 ? "…" : "");
+    };
+    const DPRE ="(?:(?:en|vers|dès|depuis|le|la|au|in|by|on|around|since|el|desde|nel|dal|il|im|am|um|seit|anno|circa)\\s+)?";
+    const rx = x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // « En 1455, Fust attaque… » devient « 1455 : Fust attaque… » ; sinon la date reste surlignée dans la phrase.
+    const factLine = (c, needle) => {
+      const m = c.match(new RegExp("^" + DPRE + rx(needle) + "\\s*[,:]?\\s*", "i"));
+      if (m && c.length - m[0].length > 15) return `**${needle}** : ${cap(c.slice(m[0].length))}`;
+      return cap(c.replace(needle, "**" + needle + "**"));
+    };
+    const good = new Set(its.map(it => it.s.slice(0, 40)));
+    const seenD = new Set(), seenEv = new Set();
+    for (const d of a.dates) {
+      if (facts.length >= Math.ceil(P.facts * 0.6)) break;
+      const k = norm(d.date); if (seenD.has(k)) continue;
+      const ev = tidy(d.event.replace(/…$/, ""));
+      if (quality(ev) < 0.45) continue;
+      let c = clause(ev, d.date); if (isShown(ev)) c = shortAround(c, d.date);
+      const ek = norm(c).slice(0, 50);
+      if (seenEv.has(ek)) continue;
+      seenD.add(k); seenEv.add(ek);
+      facts.push(factLine(c, d.date) + (d.pages || []).slice(0, 3).map(ref).join(""));
+    }
+    const NUM = /\b(\d{1,3}(?:[ ., ]\d{3})+|\d+(?:[.,]\d+)?)\s?(%|‰|pour\s?cent|percent|por\s?ciento|per\s?cento|prozent|[\p{L}]{3,}(?:\s+(?:de|d'|of|di|von)\s+[\p{L}]{3,})?)/gu;
+    const seenN = new Set();
+    for (const it of [...its].sort((x, y) => y.imp - x.imp)) {
+      if (facts.length >= P.facts - 2) break;
+      let m; NUM.lastIndex = 0;
+      while ((m = NUM.exec(it.s))) {
+        const full = m[0].trim(), n = m[1];
+        if (/^(1[0-9]|20)\d{2}$/.test(n) && !/%/.test(m[2])) continue;
+        if (ALLSTOP.has(norm(m[2])) || /^(janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|siècle|siecle|century|ans?|avant|après|apres|av|apr)$/i.test(m[2]) && !/^ans?$/i.test(m[2])) continue;
+        if (seenN.has(full) || a.dates.some(d => d.date.includes(n))) continue;
+        seenN.add(full);
+        let c = clause(it.s, full); if (shown.has(it.k)) c = shortAround(c, full);
+        const ek = norm(c).slice(0, 50);
+        if (seenEv.has(ek)) break;
+        seenEv.add(ek);
+        facts.push(factLine(c, full) + ref(it.page));
+        break;
+      }
+    }
+    const ppl = a.people.filter(p => p.name.length > 2).slice(0, 6);
+    if (ppl.length) facts.push(ppl.map(p => `**${p.name}**${(p.pages || []).slice(0, 2).map(ref).join("")}`).join(", "));
+
+    // 4. À retenir : les idées fortes pas encore citées, conclusions favorisées.
+    // (elles peuvent reprendre une phrase d'une partie : c'est un rappel de l'essentiel)
+    const kb = it => (CONCL.test(it.s) ? 1.6 : KEYCUE.test(it.s) ? 1.25 : 1) * (it.k >= N - 2 ? 1.15 : 1) * (PRON.test(it.s) ? 0.45 : 1) * (it.s.length > 260 ? 0.8 : 1);
+    // Texte court : on ne répète pas les phrases déjà affichées dans les parties.
+    const keep = [], short = N < 24;
+    const pool = its.filter(x => !bref.includes(x) && !(short && shown.has(x.k)));
+    for (const it of pool.sort((x, y) => y.imp * kb(y) - x.imp * kb(x))) {
+      if (keep.length >= (short ? Math.min(P.keep, 2) : P.keep)) break;
+      if (keep.some(o => jac(o, it) > 0.35) || bref.some(o => jac(o, it) > 0.45)) continue;
+      keep.push(it);
+    }
+    if (!keep.length) { const c = its.filter(x => CONCL.test(x.s) && !bref.includes(x))[0] || parts.length && its.filter(x => !bref.includes(x)).sort((x, y) => y.imp * kb(y) - x.imp * kb(x))[0]; if (c) keep.push(c); }
+    keep.sort((x, y) => x.k - y.k);
+
+    // 5. Page par page (chapitre de plusieurs pages)
+    let byPage = [];
+    if (opts.byPage) {
+      const pis = [...new Set(its.map(it => it.pi))];
+      if (pis.length > 1) byPage = pis.map(pi => { const l = its.filter(it => it.pi === pi).sort((x, y) => y.imp - x.imp)[0]; return `**p. ${l.page}** : ${bold(shorten(unlead(l.s), 150), 2)}${ref(l.page)}`; });
+    }
+
+    let mdx = `## ${H[0]}\n${bref.map(it => bold(shorten(unlead(it.s), P.max + 40))).join(" ")}\n`;
+    if (parts.length) {
+      mdx += `\n## ${H[1]}\n`;
+      for (const p of parts) mdx += `### ${p.title || "…"}${p.span}\n${p.lines.map(l => "- " + l).join("\n")}\n`;
+    }
+    if (facts.length) mdx += `\n## ${H[2]}\n${facts.map(f => "- " + f).join("\n")}\n`;
+    if (byPage.length) mdx += `\n## ${H[4]}\n${byPage.map(f => "- " + f).join("\n")}\n`;
+    if (keep.length) mdx += `\n## ${H[3]}\n${keep.map(it => "- " + line(it, 200)).join("\n")}\n`;
+    return mdx;
+  }
+
+  return { analyse, parsePage, search, detectLang, datesIn, sentences, fiche, quality };
 })();
 /* ===== FIN ANALYSE ===== */
 </script>
@@ -401,11 +678,11 @@ const SPINES = ["#2d3c9c", "#7a3b69", "#2b6e62", "#8a5a1f", "#3e5a7a", "#6b4fa0"
 const spineFor = s => SPINES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % SPINES.length];
 // Langues dans lesquelles l'IA rédige les fiches et traduit (le latin et le grec sont lus, pas produits)
 const OUT = {
-  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir"] },
-  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways"] },
-  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar"] },
-  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare"] },
-  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken"] },
+  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page"] },
+  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways", "Page by page"] },
+  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar", "Página por página"] },
+  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare", "Pagina per pagina"] },
+  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken", "Seite für Seite"] },
 };
 const LANGS = [["fra", "Français"], ["eng", "Anglais"], ["spa", "Espagnol"], ["ita", "Italien"], ["deu", "Allemand"], ["lat", "Latin"], ["grc", "Grec ancien"], ["ell", "Grec moderne"]];
 const langName = c => LANGS.find(l => l[0] === c)?.[1] || c;
@@ -525,7 +802,7 @@ const S = {
   pages: {}, showNewBook: false, editBook: false, addOpen: false, addTab: "photos",
   staged: [], running: false, stopReq: false, answer: null, answerFor: null, editing: null,
   confirmDel: null, resetForms: false, renaming: null, len: LEN[savedLen] ? savedLen : "moyen", pageSum: {},
-  ai: {}, aiRun: null, aiStop: false, chain: null, showTr: {},
+  ai: {}, aiRun: null, aiStop: false, chain: null, showTr: {}, ficheMode: {},
   outLang: (() => { try { const v = localStorage.getItem("carnet-outlang"); return v && OUT[v] ? v : "fra"; } catch { return "fra"; } })(), model: (() => { try { return localStorage.getItem("carnet-model") || "leger"; } catch { return "leger"; } })(),
 };
 const lenOpts = (b, extra = {}) => { const l = LEN[S.len]; return { lang: anaLang(b), overview: l.overview, points: l.points, ratio: l.ratio, ...extra }; };
@@ -565,7 +842,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-0112"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-0859"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
@@ -747,7 +1024,7 @@ function vOverview(b) {
     ${!b.example ? `<div class="row"><button class="ghost" data-a="editbook">Modifier les informations</button>${S.confirmDel === "book" ? `<button class="danger" data-a="delbook">Confirmer : supprimer le document et ses ${all.length} pages</button><button class="ghost" data-a="nodel">Annuler</button>` : `<button class="ghost danger" data-a="askdelbook">Supprimer le document</button>`}</div>` : ""}`}
   </section>
   <section class="panel"><div class="row" style="justify-content:space-between"><h2>Fiche de synthèse : tout le document</h2>${ps.length ? lenCtl() : ""}</div>
-    ${ps.length ? vAI(b, "doc", ps) + vReperes(rep) + vModelPick() : `<p class="muted">Ajoutez des pages ou collez un texte pour commencer.</p>`}
+    ${ps.length ? vAI(b, "doc", ps) + vReperes(rep) : `<p class="muted">Ajoutez des pages ou collez un texte pour commencer.</p>`}
   </section>`;
 }
 
@@ -1039,20 +1316,47 @@ function chainInfo(b, key) {
   if (key === "doc") { const chs = chapters(b).filter(c => keyPages(b, "ch:" + c.id).length); return { done: chs.filter(c => fresh(b, "ch:" + c.id, keyPages(b, "ch:" + c.id))).length, total: chs.length, unit: W(b).many }; }
   const ps = keyPages(b, key); return { done: ps.filter(p => fresh(b, "page:" + p.id, [p])).length, total: ps.length, unit: "pages" };
 }
+// Fiche intégrée : calculée sur l'appareil, sans IA, en une fraction de seconde
+const nativeCache = new Map();
+function nativeFiche(b, key, ps) {
+  const ck = b.id + "|" + key + "|" + aiSig(ps) + "|" + S.len + "|" + S.outLang;
+  if (nativeCache.has(ck)) return nativeCache.get(ck);
+  const opts = { lang: anaLang(b), len: S.len, h: OUT[S.outLang].h, noPages: key.startsWith("page:"), byPage: key.startsWith("ch:") && ps.length > 1 };
+  if (key === "doc") {
+    const chs = chapters(b), gs = [];
+    chs.forEach(c => { const pis = ps.map((p, i) => p.chapterId === c.id ? i : -1).filter(i => i >= 0); if (pis.length) gs.push({ title: c.title, pis }); });
+    const rest = ps.map((p, i) => chs.some(c => c.id === p.chapterId) ? -1 : i).filter(i => i >= 0);
+    if (rest.length) gs.push({ title: W(b).none, pis: rest });
+    if (gs.length > 1) opts.groups = gs;
+  }
+  let out = null;
+  try { out = Analyse.fiche(ps, opts); } catch (e) { console.error(e); }
+  if (nativeCache.size > 200) nativeCache.clear();
+  nativeCache.set(ck, out);
+  return out;
+}
 function vAI(b, key, ps) {
   const st = (S.ai[b.id] || {})[fk(key)];
   const run = S.aiRun && S.aiRun.bid === b.id && S.aiRun.key === key;
   const busy = !!(S.aiRun || S.chain);
   const multi = !key.startsWith("page:") && (key === "doc" ? chapters(b).length > 1 : ps.length > 1);
   const ci = multi ? chainInfo(b, key) : null;
-  const chainBtn = multi && !IA.inClaude ? `<button class="${st ? "" : "primary"}" data-a="aichain" data-id="${key}" ${busy ? "disabled" : ""}>${key === "doc" ? `Tout résumer : chaque page, chaque ${W(b).one}, puis le document` : `Résumer chaque page, puis ${W(b).the}`}</button>` : "";
-  const ciLine = ci ? `<span class="muted small">${ci.done} ${ci.unit} sur ${ci.total} ${ci.done > 1 ? "ont" : "a"} déjà leur fiche</span>` : "";
   if (run) return `<div class="ai"><div class="field"><span id="ai-status">${esc((S.chain ? S.chain.label + " · " : "") + S.aiRun.status)}</span><div class="progress"><i id="ai-bar" style="width:${Math.round(S.aiRun.pct * 100)}%"></i></div></div><div class="fiche" id="ai-text">${md(S.aiRun.text)}</div><div><button data-a="aistop">Arrêter</button></div></div>`;
-  const chainNote = S.chain && !run && multi ? `<p class="banner">${esc(S.chain.label)} : rédaction des fiches en cours, page par page. Faites défiler pour les voir apparaître.</p>` : "";
-  if (st) return `<div class="ai">${chainNote}<div class="fiche">${md(st.text)}</div><div class="row small muted">Rédigée par l'IA sur votre appareil · ${esc(LEN[st.len]?.label || "")}${st.sig !== aiSig(ps) ? ` · <b class="warn-t">des pages ont changé depuis</b>` : ""}<button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>Refaire</button>${chainBtn}${ciLine}</div></div>`;
-  if (IA.inClaude) return `<div class="ai ai-empty"><p>Les fiches de synthèse par IA (contexte, grandes parties, mots-clés en couleur, « À retenir ») marchent sur le site de l'application : <a href="${GH_URL}" target="_blank" rel="noopener">${GH_URL.replace("https://", "")}</a>. L'IA y tourne sur votre appareil ; ce lien Claude ne peut pas la télécharger.</p></div>`;
-  return `<div class="ai ai-empty">${chainNote}<div class="row">${chainBtn}<button class="${multi ? "" : "primary"}" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>${multi ? "Fiche directe (plus rapide)" : "Rédiger la fiche de synthèse"}</button>${ciLine}</div>
-    <p class="muted small">${multi ? "« Résumer chaque page » donne une fiche par page, puis une fiche d'ensemble construite à partir d'elles : plus long, mais plus fidèle et plus cohérent. " : ""}${IA.engine ? "L'IA est prête." : `La première fois, l'IA (≈${(MODELS[S.model] || MODELS.leger).size}) se télécharge sur votre appareil, puis reste disponible, même hors ligne. Rien n'est envoyé sur internet.`}</p></div>`;
+  const mode = st && S.ficheMode[key] !== "native" ? "ai" : "native";
+  const tabs = st ? `<div class="row small" role="group" aria-label="Type de fiche"><button class="small ${mode === "native" ? "primary" : ""}" data-a="fmode" data-m="native" data-id="${key}" aria-pressed="${mode === "native"}">Fiche intégrée</button><button class="small ${mode === "ai" ? "primary" : ""}" data-a="fmode" data-m="ai" data-id="${key}" aria-pressed="${mode === "ai"}">Fiche rédigée par l'IA</button></div>` : "";
+  const chainNote = S.chain && multi ? `<p class="banner">${esc(S.chain.label)} : rédaction des fiches par l'IA en cours, page par page. Faites défiler pour les voir apparaître.</p>` : "";
+  if (mode === "ai") return `<div class="ai">${tabs}${chainNote}<div class="fiche">${md(st.text)}</div><div class="row small muted">Rédigée par l'IA sur votre appareil · ${esc(LEN[st.len]?.label || "")}${st.sig !== aiSig(ps) ? ` · <b class="warn-t">des pages ont changé depuis</b>` : ""}<button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>Refaire</button></div></div>`;
+  const nat = nativeFiche(b, key, ps);
+  const chainBtn = multi ? `<button class="small" data-a="aichain" data-id="${key}" ${busy ? "disabled" : ""}>${key === "doc" ? `Chaque page, chaque ${W(b).one}, puis le document` : `Chaque page, puis ${W(b).the}`}</button>` : "";
+  const ciLine = ci && ci.done ? `<span class="muted small">${ci.done} ${ci.unit} sur ${ci.total} ${ci.done > 1 ? "ont" : "a"} déjà leur fiche IA</span>` : "";
+  const aiOpt = IA.inClaude
+    ? `<p class="muted small">Option : une fiche reformulée par l'IA est possible sur le site de l'application (<a href="${GH_URL}" target="_blank" rel="noopener">${GH_URL.replace("https://", "")}</a>).</p>`
+    : `<details class="aiopt"${S.chain ? " open" : ""}><summary>Option : faire reformuler la fiche par l'IA</summary>
+      <div class="row small" style="margin-top:8px"><button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>${multi ? "Fiche IA directe" : "Rédiger avec l'IA"}</button>${chainBtn}${ciLine}</div>
+      <p class="muted small">L'IA réécrit la fiche avec ses propres phrases. C'est plus lent (une à plusieurs minutes) et ${IA.engine ? "elle est déjà chargée." : `elle se télécharge la première fois (≈${(MODELS[S.model] || MODELS.leger).size}), puis reste sur l'appareil.`} Rien n'est envoyé sur internet.</p>${vModelPick()}</details>`;
+  return `<div class="ai">${tabs}${chainNote}<div class="fiche">${nat ? md(nat) : `<p class="muted">Pas assez de texte lisible pour une fiche. Vérifiez le texte des pages (bouton « Corriger le texte »).</p>`}</div>
+    <p class="muted small">Fiche intégrée : faite à l'instant sur votre appareil avec les phrases du texte, sans IA ni téléchargement.${S.outLang !== "fra" || (anaLang(b) && anaLang(b) !== "fra") ? " Les phrases restent dans la langue du texte ; pour une autre langue, utilisez la traduction ou la fiche IA." : ""}</p>
+    ${aiOpt}</div>`;
 }
 /* ---------- traduction par l'IA (vers français, anglais, espagnol, italien, allemand) ---------- */
 const trKey = (pid, lang = S.outLang) => "tr:" + pid + "@" + lang;
@@ -1283,7 +1587,8 @@ app.addEventListener("click", async e => {
   const a = t.dataset.a, id = t.dataset.id, b = book();
   if (!["delpage", "delbook", "delch", "askdelbook", "askdelch"].includes(a)) S.confirmDel = null;
   switch (a) {
-    case "airun": runAI(id); break;
+    case "airun": S.ficheMode[id] = "ai"; runAI(id); break;
+    case "fmode": S.ficheMode[id] = t.dataset.m; render(); break;
     case "aichain": runChain(id); break;
     case "trrun": runTranslate(id); break;
     case "checkupd": Updates.check(true); break;
