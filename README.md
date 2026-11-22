@@ -6,6 +6,7 @@ Une application web pour résumer n'importe quel texte : livre, article, cours, 
 - **8 langues** : français, anglais, espagnol, italien, allemand, latin, grec ancien, grec moderne.
 - Les pages sont **rangées par chapitre ou par partie** (détection automatique des titres « Chapitre 3 », « Kapitel », « Caput »…) avec leur **numéro de page**.
 - **Fiches de synthèse par IA**, rédigées sur l'appareil (WebLLM, modèle Qwen 2.5, aucun envoi sur internet) : contexte, grandes parties numérotées, mots-clés surlignés, chiffres et dates, encadré « À retenir ». Une fiche par page, une fiche par chapitre construite à partir des fiches des pages, et une fiche pour le document entier. Trois longueurs : court, moyen, détaillé. Demande un navigateur avec WebGPU (Chrome, Edge, Safari sur iOS 26+).
+- **Traduction** de chaque page ou de tout un chapitre par la même IA, vers le français, l'anglais, l'espagnol, l'italien ou l'allemand (y compris depuis le latin et le grec). Les fiches peuvent aussi être rédigées dans ces langues.
 - **Repères** trouvés sans IA : dates, noms, références et notes de bas de page, avec leurs pages.
 - **Recherche** dans un chapitre : les passages qui répondent le mieux, avec leur page.
 - **Exporter / Importer** pour passer ses documents d'un appareil à l'autre.

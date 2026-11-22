@@ -377,6 +377,14 @@ let toastT;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3500); }
 const SPINES = ["#2d3c9c", "#7a3b69", "#2b6e62", "#8a5a1f", "#3e5a7a", "#6b4fa0", "#a0433a"];
 const spineFor = s => SPINES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % SPINES.length];
+// Langues dans lesquelles l'IA rédige les fiches et traduit (le latin et le grec sont lus, pas produits)
+const OUT = {
+  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir"] },
+  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways"] },
+  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar"] },
+  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare"] },
+  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken"] },
+};
 const LANGS = [["fra", "Français"], ["eng", "Anglais"], ["spa", "Espagnol"], ["ita", "Italien"], ["deu", "Allemand"], ["lat", "Latin"], ["grc", "Grec ancien"], ["ell", "Grec moderne"]];
 const langName = c => LANGS.find(l => l[0] === c)?.[1] || c;
 const TYPES = [["livre", "Livre"], ["article", "Article"], ["post", "Publication / réseau social"],["cours", "Cours"], ["rapport", "Rapport / étude"], ["notes", "Notes"], ["autre", "Autre document"]];
@@ -495,10 +503,12 @@ const S = {
   pages: {}, showNewBook: false, editBook: false, addOpen: false, addTab: "photos",
   staged: [], running: false, stopReq: false, answer: null, answerFor: null, editing: null,
   confirmDel: null, resetForms: false, renaming: null, len: LEN[savedLen] ? savedLen : "moyen", pageSum: {},
-  ai: {}, aiRun: null, aiStop: false, chain: null, model: (() => { try { return localStorage.getItem("carnet-model") || "leger"; } catch { return "leger"; } })(),
+  ai: {}, aiRun: null, aiStop: false, chain: null, showTr: {},
+  outLang: (() => { try { const v = localStorage.getItem("carnet-outlang"); return v && OUT[v] ? v : "fra"; } catch { return "fra"; } })(), model: (() => { try { return localStorage.getItem("carnet-model") || "leger"; } catch { return "leger"; } })(),
 };
 const lenOpts = (b, extra = {}) => { const l = LEN[S.len]; return { lang: anaLang(b), overview: l.overview, points: l.points, ratio: l.ratio, ...extra }; };
-const lenCtl = () => `<div class="row small" role="group" aria-label="Longueur du résumé"><span class="muted small">Longueur</span>${Object.entries(LEN).map(([k, v]) => `<button class="${S.len === k ? "primary" : ""} small" style="padding:4px 10px" data-a="len" data-id="${k}" aria-pressed="${S.len === k}">${v.label}</button>`).join("")}</div>`;
+const langPick = () => `<select data-a="outlang" aria-label="Langue des fiches et traductions" style="width:auto;padding:4px 8px">${Object.entries(OUT).map(([k, o]) => `<option value="${k}" ${S.outLang === k ? "selected" : ""}>${o.label}</option>`).join("")}</select>`;
+const lenCtl = () => `<div class="row small" role="group" aria-label="Longueur et langue"><span class="muted small">Longueur</span>${Object.entries(LEN).map(([k, v]) => `<button class="${S.len === k ? "primary" : ""} small" style="padding:4px 10px" data-a="len" data-id="${k}" aria-pressed="${S.len === k}">${v.label}</button>`).join("")}<span class="muted small">Langue</span>${langPick()}</div>`;
 const book = () => S.bookId === EX_ID ? EXAMPLE.book : S.books.find(b => b.id === S.bookId);
 const pagesOf = bid => (bid === EX_ID ? EXAMPLE.pages : (S.pages[bid] || []));
 const sortPages = ps => [...ps].sort((a, b) => (pnum(a.page) - pnum(b.page)) || (a.addedAt - b.addedAt));
@@ -693,7 +703,7 @@ function vChapter(b, c) {
   const rep = ps.length ? analyseCached(key, ps, lenOpts(b)) : null;
   const others = chs.filter(x => x.id !== c.id);
   const pcard = p => {
-    const pk = "page:" + p.id, hasFiche = (S.ai[b.id] || {})[pk];
+    const pk = "page:" + p.id, hasFiche = (S.ai[b.id] || {})[fk(pk)];
     const running = S.aiRun && S.aiRun.key === pk;
     const editing = S.editing === p.id, open = running || (S.pageSum[p.id] !== false && (S.pageSum[p.id] || hasFiche));
     return `<article class="pagecard" id="pg-${esc(p.id)}">
@@ -707,12 +717,14 @@ function vChapter(b, c) {
     ${running ? "" : `<div class="row"><button class="ghost small" data-a="pageclose" data-id="${p.id}">Replier</button></div>`}` : `
     <p class="muted small" style="max-width:68ch">${esc((p.text || "").replace(/\s+/g, " ").slice(0, 220))}${(p.text || "").length > 220 ? "…" : ""}</p>`}
     ${!editing && p.text ? `<details><summary>Voir le texte de la page</summary><div class="transcript">${esc(p.text)}</div></details>` : ""}
+    ${!editing && p.text ? vTr(b, p) : ""}
     ${!editing ? `<div class="row small">${!open ? `<button class="small" data-a="pagesum" data-id="${p.id}">Résumer cette page</button>` : ""}${!b.example ? `<button class="ghost small" data-a="edit" data-id="${p.id}">Corriger le texte</button><label class="muted small" for="mv-${p.id}">Déplacer vers</label><select id="mv-${p.id}" data-a="move" data-id="${p.id}" style="width:auto;max-width:100%"><option value="">—</option>${others.map(o => `<option value="${o.id}">${esc(o.title)}</option>`).join("")}</select><button class="ghost danger small" data-a="delpage" data-id="${p.id}">${S.confirmDel === p.id ? "Confirmer la suppression" : "Supprimer"}</button>` : ""}</div>` : ""}
   </article>`;
   };
   const ans = S.answerFor === c.id && S.answer;
   return `<section class="panel">
-    <div class="row" style="justify-content:space-between;align-items:flex-start"><div class="bookhead"><span class="label">${c.virtual ? "" : w.one[0].toUpperCase() + w.one.slice(1) + " " + (chs.indexOf(c) + 1) + " · "}${range(ps) || "aucune page"}</span><h2>${esc(c.title)}</h2></div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><div class="bookhead"><span class="label">${c.virtual ? "" : w.one[0].toUpperCase() + w.one.slice(1) + " " + (chs.indexOf(c) + 1) + " · "}${range(ps) || "aucune page"}</span><h2>${esc(c.title)}</h2>
+      ${!IA.inClaude && ps.length ? `<div class="row small"><button class="small" data-a="trall" data-id="${key}" ${S.aiRun || S.chain ? "disabled" : ""}>Traduire toutes les pages en ${OUT[S.outLang].name}</button>${langPick()}</div>` : ""}</div>
       ${!b.example && !c.virtual ? `<div class="row"><button class="ghost" data-a="renamech">Renommer</button>${S.confirmDel === c.id ? `<button class="danger" data-a="delch">Confirmer (les pages sont gardées)</button>` : `<button class="ghost danger" data-a="askdelch">Supprimer</button>`}</div>` : ""}</div>
     ${S.renaming === c.id ? `<div class="row"><input id="rename" class="grow" style="flex:1" value="${esc(c.title)}"><button class="primary" data-a="saverename">OK</button></div>` : ""}
   </section>
@@ -795,32 +807,35 @@ function ficheMsgs(b, scope, source, fromNotes, lenKey = S.len, fromFiches = "")
     ? `Voici les fiches déjà rédigées pour ${fromFiches}, dans l'ordre. Construis à partir d'elles UNE fiche d'ensemble cohérente ${scope} : suis le fil logique du début à la fin, regroupe ce qui se répète, et garde les numéros de page.`
     : fromNotes ? `Voici des notes prises sur le texte ${scope}, dans l'ordre.`
     : `Voici le texte ${scope}, lu sur des photos : ignore les erreurs de lecture et les éléments d'interface (boutons, menus, compteurs de « j'aime », « Répondre », « Republier », heures).`;
+  const O = OUT[S.outLang] || OUT.fra, H = O.h;
   return [{ role: "system", content: SYS }, { role: "user", content: `${docLine(b)}
 ${intro}
-Rédige une fiche de synthèse ${len}, en français même si le texte est dans une autre langue, avec EXACTEMENT ce plan :
+Rédige une fiche de synthèse ${len}, entièrement en ${O.name} (traduis si le texte est dans une autre langue), avec EXACTEMENT ce plan et ces titres :
 
-## En bref
+## ${H[0]}
 Deux phrases maximum qui posent le contexte : de quoi il s'agit, qui parle ou qui est concerné, quand, et pourquoi c'est important.
 
-## Les grandes parties
+## ${H[1]}
 ### Titre court de la première partie
 - Idée reformulée en une phrase, avec 1 à 3 **mots importants en gras** (p. 12)
 - …
 ### Titre court de la partie suivante
 - …
 
-## Chiffres, dates et noms clés
+## ${H[2]}
 - **date, chiffre ou nom** : ce qu'il représente (p. 12)
 
-## À retenir
+## ${H[3]}
 - Une à trois phrases : l'essentiel à garder en tête.
 
-Règles : reformule, ne recopie pas ; regroupe les idées proches dans la même partie ; n'oublie aucun élément important ; mets la page entre parenthèses quand elle est connue ; supprime la section « Chiffres, dates et noms clés » s'il n'y en a aucun ; rien après « À retenir ».
+Règles : tout en ${O.name} ; reformule, ne recopie pas ; regroupe les idées proches dans la même partie ; n'oublie aucun élément important ; mets la page entre parenthèses quand elle est connue ; supprime la section « ${H[2]} » s'il n'y en a aucun ; rien après « ${H[3]} ».
 
 ${fromFiches ? "FICHES" : fromNotes ? "NOTES" : "TEXTE"} :
 ${source}` }];
 }
-const fresh = (b, key, ps) => { const r = (S.ai[b.id] || {})[key]; return r && r.sig === aiSig(ps) ? r : null; };
+// Les fiches sont gardées par langue : "page:xxx" en français, "page:xxx@eng" en anglais…
+const fk = key => key + (S.outLang === "fra" ? "" : "@" + S.outLang);
+const fresh = (b, key, ps) => { const r = (S.ai[b.id] || {})[fk(key)]; return r && r.sig === aiSig(ps) ? r : null; };
 // Pour un chapitre : les fiches des pages. Pour le document : les fiches des chapitres. Seulement si elles sont toutes prêtes.
 function subFiches(b, key) {
   if (key.startsWith("ch:")) {
@@ -908,9 +923,9 @@ async function runAI(key, opt = {}) {
     S.aiRun.status = "Rédaction de la fiche…"; S.aiRun.pct = 1; S.aiRun.text = ""; paintAI();
     const text = await IA.chat(ficheMsgs(b, scopeName(b, key), parts[0], fromNotes, lenKey, sub && round === 0 ? sub.what : ""), { max_tokens: (LENP[lenKey] || LENP.moyen)[1], onText: t => { S.aiRun.text = t; paintAI(); } });
     if (S.aiStop) throw { code: "stop" };
-    const rec = { text, len: lenKey, sig: aiSig(ps), at: Date.now(), model: S.model };
-    (S.ai[b.id] = S.ai[b.id] || {})[key] = rec;
-    if (!b.example) await Store.saveSum(b.id, key, rec).catch(() => toast("Fiche affichée, mais pas enregistrée."));
+    const rec = { text, len: lenKey, sig: aiSig(ps), at: Date.now(), model: S.model, lang: S.outLang };
+    (S.ai[b.id] = S.ai[b.id] || {})[fk(key)] = rec;
+    if (!b.example) await Store.saveSum(b.id, fk(key), rec).catch(() => toast("Fiche affichée, mais pas enregistrée."));
     ok = true;
   } catch (e) {
     toast(aiErr(e));
@@ -925,7 +940,7 @@ function paintAI() {
   requestAnimationFrame(() => {
     aiPaintQueued = false; if (!S.aiRun) return;
     const s = $("#ai-status"), bar = $("#ai-bar"), t = $("#ai-text");
-    if (s) s.textContent = (S.chain ? S.chain.label + " · " : "") + S.aiRun.status; if (bar) bar.style.width = Math.round(S.aiRun.pct * 100) + "%"; if (t) t.innerHTML = md(S.aiRun.text);
+    if (s) s.textContent = (S.chain ? S.chain.label + " · " : "") + S.aiRun.status; if (bar) bar.style.width = Math.round(S.aiRun.pct * 100) + "%"; if (t) { if (S.aiRun.plain) t.textContent = S.aiRun.text; else t.innerHTML = md(S.aiRun.text); }
   });
 }
 
@@ -945,7 +960,10 @@ function md(src) {
     if ((m = line.match(/^\s*#{1,2}\s+(.*)$/))) {
       closeSec();
       const name = m[1].replace(/\*\*/g, "").replace(/[:：]\s*$/, "");
-      const cls = /bref|contexte|résumé/i.test(name) ? "ctx" : /retenir|essentiel|conclusion/i.test(name) ? "keep" : /chiffre|date|nom|clé/i.test(name) ? "facts" : /partie|idée|point/i.test(name) ? "parts" : "other";
+      const cls = /bref|contexte|résumé|in short|overview|resumen|breve|kurz/i.test(name) ? "ctx"
+        : /retenir|essentiel|conclusion|takeaway|remember|recordar|ricordare|merken|fazit/i.test(name) ? "keep"
+        : /chiffre|date|nom|clé|figure|name|cifra|fecha|nombre|cifre|nomi|zahl|daten/i.test(name) ? "facts"
+        : /partie|idée|point|part|partes|parti|teil/i.test(name) ? "parts" : "other";
       html += `<section class="f f-${cls}"><h3 class="f-h">${esc(name)}</h3>`; sec = true;
     } else if ((m = line.match(/^\s*#{3,6}\s+(.*)$/))) {
       closeList(); part++;
@@ -966,7 +984,7 @@ function chainInfo(b, key) {
   const ps = keyPages(b, key); return { done: ps.filter(p => fresh(b, "page:" + p.id, [p])).length, total: ps.length, unit: "pages" };
 }
 function vAI(b, key, ps) {
-  const st = (S.ai[b.id] || {})[key];
+  const st = (S.ai[b.id] || {})[fk(key)];
   const run = S.aiRun && S.aiRun.bid === b.id && S.aiRun.key === key;
   const busy = !!(S.aiRun || S.chain);
   const multi = !key.startsWith("page:") && (key === "doc" ? chapters(b).length > 1 : ps.length > 1);
@@ -980,6 +998,82 @@ function vAI(b, key, ps) {
   return `<div class="ai ai-empty">${chainNote}<div class="row">${chainBtn}<button class="${multi ? "" : "primary"}" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>${multi ? "Fiche directe (plus rapide)" : "Rédiger la fiche de synthèse"}</button>${ciLine}</div>
     <p class="muted small">${multi ? "« Résumer chaque page » donne une fiche par page, puis une fiche d'ensemble construite à partir d'elles : plus long, mais plus fidèle et plus cohérent. " : ""}${IA.engine ? "L'IA est prête." : `La première fois, l'IA (≈${(MODELS[S.model] || MODELS.leger).size}) se télécharge sur votre appareil, puis reste disponible, même hors ligne. Rien n'est envoyé sur internet.`}</p></div>`;
 }
+/* ---------- traduction par l'IA (vers français, anglais, espagnol, italien, allemand) ---------- */
+const trKey = (pid, lang = S.outLang) => "tr:" + pid + "@" + lang;
+function splitText(text, max) {
+  const pieces = [];
+  for (const para of String(text || "").split(/\n\s*\n/)) {
+    if (para.length <= max) { if (para.trim()) pieces.push(para); continue; }
+    let cur = "";
+    for (const s of para.match(/[^.!?;…]+[.!?;…]*\s*/g) || [para]) {
+      if (cur && cur.length + s.length > max) { pieces.push(cur); cur = ""; }
+      if (s.length > max) { for (let i = 0; i < s.length; i += max) pieces.push(s.slice(i, i + max)); } else cur += s;
+    }
+    if (cur.trim()) pieces.push(cur);
+  }
+  const out = []; let cur = "";
+  for (const p of pieces) { if (cur && cur.length + p.length > max) { out.push(cur); cur = ""; } cur += (cur ? "\n\n" : "") + p; }
+  if (cur) out.push(cur);
+  return out;
+}
+const trMsgs = chunk => [
+  { role: "system", content: "Tu es un traducteur professionnel. Tu traduis fidèlement et intégralement, sans résumer, sans commenter et sans rien ajouter." },
+  { role: "user", content: `Traduis en ${(OUT[S.outLang] || OUT.fra).name} le texte ci-dessous. Il vient d'une lecture automatique de photo : corrige les mots mal lus d'après le contexte, ignore les éléments d'interface (boutons, compteurs, menus), garde les paragraphes et les noms propres. S'il est en latin ou en grec, traduis le sens avec soin. Réponds uniquement par la traduction.
+
+TEXTE :
+${chunk}` }];
+async function runTranslate(pid, opt = {}) {
+  const b = book(); if (!b) return false;
+  if (S.aiRun) { toast("L'IA est déjà occupée."); return false; }
+  if (S.chain && !opt.chain) { toast("L'IA est déjà occupée."); return false; }
+  const p = pagesOf(b.id).find(x => x.id === pid); if (!p || !(p.text || "").trim()) return false;
+  const O = OUT[S.outLang] || OUT.fra;
+  S.aiRun = { bid: b.id, key: "tr:" + pid, text: "", status: "Préparation de l'IA…", pct: 0, plain: true }; S.aiStop = false; S.showTr[pid] = true; render();
+  let ok = false;
+  try {
+    await IA.get(pr => { S.aiRun.status = `Chargement de l'IA sur votre appareil : ${Math.round((pr.progress || 0) * 100)} %`; S.aiRun.pct = pr.progress || 0; paintAI(); });
+    const parts = splitText(p.text, 2200);
+    let out = "";
+    for (let i = 0; i < parts.length; i++) {
+      if (S.aiStop) throw { code: "stop" };
+      S.aiRun.status = `Traduction en ${O.name}${parts.length > 1 ? ` : morceau ${i + 1} sur ${parts.length}` : ""}…`; S.aiRun.pct = i / parts.length; paintAI();
+      const prev = out;
+      const t = await IA.chat(trMsgs(parts[i]), { max_tokens: 1500, onText: t => { S.aiRun.text = (prev ? prev + "\n\n" : "") + t; paintAI(); } });
+      out = (prev ? prev + "\n\n" : "") + t;
+    }
+    if (S.aiStop) throw { code: "stop" };
+    const rec = { text: out, sig: aiSig([p]), at: Date.now(), lang: S.outLang, model: S.model };
+    (S.ai[b.id] = S.ai[b.id] || {})[trKey(pid)] = rec;
+    if (!b.example) await Store.saveSum(b.id, trKey(pid), rec).catch(() => toast("Traduction affichée, mais pas enregistrée."));
+    ok = true;
+  } catch (e) {
+    toast(aiErr(e));
+    if (e?.code !== "stop" && /dispos|device|lost|memory|GPU/i.test(String(e?.message || e))) { try { IA.engine?.unload(); } catch {} IA.engine = null; }
+  }
+  S.aiRun = null; render();
+  return ok;
+}
+async function runTranslateAll(key) {
+  const b = book(); if (!b || S.aiRun || S.chain) return;
+  const ps = keyPages(b, key).filter(p => { const r = (S.ai[b.id] || {})[trKey(p.id)]; return (p.text || "").trim() && !(r && r.sig === aiSig([p])); });
+  if (!ps.length) { toast("Toutes les pages sont déjà traduites dans cette langue."); return; }
+  S.chain = { stop: false, label: "", n: ps.length, i: 0 };
+  for (let i = 0; i < ps.length; i++) {
+    if (S.chain.stop) break;
+    S.chain.label = `Page ${i + 1} sur ${ps.length}`;
+    if (!(await runTranslate(ps[i].id, { chain: true }))) break;
+  }
+  S.chain = null; render();
+}
+function vTr(b, p) {
+  if (IA.inClaude) return "";
+  const O = OUT[S.outLang] || OUT.fra, r = (S.ai[b.id] || {})[trKey(p.id)];
+  const run = S.aiRun && S.aiRun.bid === b.id && S.aiRun.key === "tr:" + p.id;
+  if (run) return `<div class="ai"><div class="field"><span id="ai-status">${esc((S.chain ? S.chain.label + " · " : "") + S.aiRun.status)}</span><div class="progress"><i id="ai-bar" style="width:${Math.round(S.aiRun.pct * 100)}%"></i></div></div><div class="transcript" id="ai-text">${esc(S.aiRun.text)}</div><div><button data-a="aistop">Arrêter</button></div></div>`;
+  if (r) return `<details class="tr" ${S.showTr[p.id] ? "open" : ""}><summary>Traduction en ${O.name}${r.sig !== aiSig([p]) ? " · le texte a changé depuis" : ""}</summary><div class="transcript">${esc(r.text)}</div><div class="row small"><button class="ghost small" data-a="trrun" data-id="${p.id}" ${S.aiRun || S.chain ? "disabled" : ""}>Refaire la traduction</button></div></details>`;
+  return `<div><button class="ghost small" data-a="trrun" data-id="${p.id}" ${S.aiRun || S.chain ? "disabled" : ""}>Traduire cette page en ${O.name}</button></div>`;
+}
+
 function vModelPick() {
   if (IA.inClaude) return "";
   return `<label class="field" style="max-width:420px"><span>IA utilisée pour les fiches</span><select id="model-sel">${Object.entries(MODELS).map(([k, m]) => `<option value="${k}" ${S.model === k ? "selected" : ""}>${m.label} (≈${m.size})</option>`).join("")}</select></label>`;
@@ -1135,6 +1229,8 @@ app.addEventListener("click", async e => {
   switch (a) {
     case "airun": runAI(id); break;
     case "aichain": runChain(id); break;
+    case "trrun": runTranslate(id); break;
+    case "trall": runTranslateAll(id); break;
     case "aistop": S.aiStop = true; if (S.chain) S.chain.stop = true; try { IA.engine?.interruptGenerate(); } catch {} break;
     case "newbook": S.showNewBook = true; S.view = "library"; render(); $("#bf-title")?.focus(); break;
     case "cancelbook": S.showNewBook = false; S.resetForms = true; render(); break;
@@ -1242,6 +1338,7 @@ app.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "imp" && t.files?.[0]) { const f = t.files[0]; t.value = ""; importFile(f); return; }
   if (t.id === "model-sel") { S.model = t.value; try { localStorage.setItem("carnet-model", t.value); } catch {} toast("IA choisie : " + MODELS[t.value].label.split(" :")[0] + ". Elle se chargera à la prochaine fiche."); return; }
+  if (t.dataset?.a === "outlang") { S.outLang = t.value; try { localStorage.setItem("carnet-outlang", t.value); } catch {} render(); return; }
   if (t.dataset?.a !== "move" || !t.value) return;
   const b = book(), p = pagesOf(b.id).find(x => x.id === t.dataset.id); if (!p) return;
   p.chapterId = t.value;
