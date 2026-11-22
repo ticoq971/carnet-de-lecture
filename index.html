@@ -522,7 +522,7 @@ const Analyse = (() => {
     // Sujet principal du texte (personne la plus citée) : remplace le « he / il » d'une phrase sortie de son contexte.
     const keptTxt = its.map(it => it.s).join(" ");
     const cnt = n => { const m = keptTxt.match(new RegExp("\\b" + n.replace(/[.*+?^$|()[\]\\{}]/g, "\\$&") + "\\b", "g")); return m ? m.length : 0; };
-    let subject = "";
+    let subject = "", thematic = false;
     {
       // le mot à majuscule le plus fréquent (jamais écrit en minuscule, ni mois, ni mot-outil) : le sujet du texte
       const caps = new Map(), low = new Set();
@@ -596,7 +596,7 @@ const Analyse = (() => {
         label = (isTitle ? t0n : "") || subj2 || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
         if (!label) { const pn = a.people.map(p => p.name.replace(/[.,;]+$/, "")).find(n => cnt(n) >= 2); if (pn) label = pn; }
         if (!label) { const kt = [...keyTerms][0]; label = kt ? cap(form(kt)) : ""; }
-        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) { const top = df.get(kt0); const more = [...keyTerms].slice(1).filter(t => df.get(t) >= Math.max(2, top * 0.6) && nn(t) >= 0.5 && t.length >= 4 && !MON.test(form(t))).slice(0, 2).map(t => form(t).toLowerCase()); label = [w, ...more].join(", "); } } }
+        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) { const top = df.get(kt0); const more = [...keyTerms].slice(1).filter(t => df.get(t) >= Math.max(2, top * 0.6) && nn(t) >= 0.5 && t.length >= 4 && !MON.test(form(t))).slice(0, 2).map(t => form(t).toLowerCase()); label = [w, ...more].join(", "); thematic = true; } } }
         const last = label.toLowerCase().split(/\s+/).pop();
         const cand = its.slice(0, 3).find(it => last && !used.has(it.k) && !PRON.test(it.s) && it.s.toLowerCase().includes(last)) || its.find(it => !used.has(it.k) && !PRON.test(it.s)) || its.find(it => !used.has(it.k));
         if (label && cand) {
@@ -642,7 +642,7 @@ const Analyse = (() => {
     }
 
     // 1. En bref : les phrases les plus centrales, le début du texte un peu favorisé.
-    const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => (it.k < 4 ? (N > 40 ? 1.7 : 1.25) : it.k < 9 && N > 40 ? 1.25 : 1) * ((it.s.match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/g) || []).length >= 3 ? 0.6 : 1) * (subject && it.s.includes(subject) ? 1.2 : 1));
+    const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => (it.k < 4 ? (N > 40 ? 1.7 : 1.25) : it.k < 9 && N > 40 ? 1.25 : 1) * ((it.s.match(/\b(?:1[0-9]{3}|20[0-9]{2})\b/g) || []).length >= 3 ? 0.6 : 1) * (subject && it.s.includes(subject) ? 1.2 : 1) * (it.s.length > 260 ? 0.6 : 1));
 
     // 2. Les grandes parties : groupes donnés (chapitres) ou découpage aux changements de sujet.
     let segs;
@@ -700,7 +700,7 @@ const Analyse = (() => {
     const nameTitle = sg => {
       const f = spansOf(sg);
       const minC = sg.items.length >= 4 ? 2 : 1;
-      const top = [...f.entries()].filter(([t, c]) => c >= minC && !/\p{Ll}\p{Lu}/u.test(t) && !/^[\p{Lu}\d-]{2,5}$/u.test(t) && !/(?:^|\s)\p{L}{1,2}$/u.test(t) && !/\b(?:St|Mme|Dr|Bk|Vol|Ch|No|Nr)$/.test(t)).map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.sqrt(Math.log(1 + segs.length / spanDf.get(t)) + 0.3)]).sort((x, y) => y[1] - x[1]);
+      const top = [...f.entries()].filter(([t, c]) => c >= minC && !(thematic && !/\s/.test(t)) &&!/\p{Ll}\p{Lu}/u.test(t) && !/^[\p{Lu}\d-]{2,5}$/u.test(t) && !/(?:^|\s)\p{L}{1,2}$/u.test(t) && !/\b(?:St|Mme|Dr|Bk|Vol|Ch|No|Nr)$/.test(t)).map(([t, c]) => [t, (c + 0.5 * (t.split(/\s+/).length - 1)) * Math.sqrt(Math.log(1 + segs.length / spanDf.get(t)) + 0.3)]).sort((x, y) => y[1] - x[1]);
       const pick = [];
       if (segs.length >= 3) { const rare = top.filter(([t]) => spanDf.get(t) < 0.6 * segs.length); if (rare.length) top.splice(0, top.length, ...rare); }
       for (const [t, sc] of top) { if (pick.length >= 2) break; if (pick.length && sc < 0.6 * top[0][1]) break; if (pick.some(p => p.includes(t) || t.includes(p))) continue; pick.push(t); }
@@ -709,7 +709,7 @@ const Analyse = (() => {
     const titleOf = sg => {
       const nt = segs.length > 1 ? nameTitle(sg) : ""; if (nt) return nt;
       const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
-      const top = [...f.entries()].filter(([t]) => t.length >= 3 && !/^(?:first|second|third|fourth|fifth|last|next|new|old|premier|première|second|dernier|ancien|nouveau|primero|segundo|erste|zweite)$/i.test(form(t)) && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
+      const top = [...f.entries()].filter(([t]) => t.length >= 3 && !/^(?:first|second|third|fourth|fifth|last|next|new|old|premier|première|second|dernier|ancien|nouveau|primero|segundo|erste|zweite)$/i.test(form(t)) && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) && !thematic ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
       if (!top.length) return "";
       // une expression du texte qui contient les deux premiers mots (ex. « caractères mobiles »)
       if (top.length > 1) for (const it of sg.items) {
@@ -1221,7 +1221,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1836"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1844"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
