@@ -5,7 +5,8 @@ Une application web pour résumer n'importe quel texte : livre, article, cours, 
 - **Photographiez les pages** ou **collez le texte**. Les photos sont lues directement dans le navigateur (OCR Tesseract), sans IA et sans serveur.
 - **8 langues** : français, anglais, espagnol, italien, allemand, latin, grec ancien, grec moderne.
 - Les pages sont **rangées par chapitre ou par partie** (détection automatique des titres « Chapitre 3 », « Kapitel », « Caput »…) avec leur **numéro de page**.
-- **Résumés** d'une page, d'un chapitre ou du document entier, en trois longueurs (court, moyen, détaillé) : points importants, dates, noms cités, moments marquants, références et notes de bas de page, chacun avec ses pages.
+- **Fiches de synthèse par IA**, rédigées sur l'appareil (WebLLM, modèle Qwen 2.5, aucun envoi sur internet) : contexte, grandes parties numérotées, mots-clés surlignés, chiffres et dates, encadré « À retenir ». Une fiche par page, une fiche par chapitre construite à partir des fiches des pages, et une fiche pour le document entier. Trois longueurs : court, moyen, détaillé. Demande un navigateur avec WebGPU (Chrome, Edge, Safari sur iOS 26+).
+- **Repères** trouvés sans IA : dates, noms, références et notes de bas de page, avec leurs pages.
 - **Recherche** dans un chapitre : les passages qui répondent le mieux, avec leur page.
 - **Exporter / Importer** pour passer ses documents d'un appareil à l'autre.
 

@@ -8,6 +8,7 @@
   --bg:#eceee9; --surface:#fafbf8; --surface-2:#f2f4ef; --ink:#1c2330; --muted:#5b6470; --line:#d3d8cf;
   --accent:#2d3c9c; --accent-soft:#e2e5f6; --accent-ink:#ffffff;
   --hl:rgba(246,214,64,.55); --ok:#2b7a4b; --warn:#9a6200; --bad:#b3261e;
+  --p1:#2d5fbf; --p2:#1f8a5b; --p3:#8a3fb5; --p4:#c0661b; --keep-bg:#fff6cf; --keep-line:#e3b400; --ctx-bg:#eef1fb;
   --f-read:"Literata", Georgia, "Times New Roman", serif;
   --f-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
@@ -16,13 +17,39 @@
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#13161b; --surface:#1b1f26; --surface-2:#222731; --ink:#e5e8ed; --muted:#99a2ad; --line:#2e343e;
   --accent:#9aa6ff; --accent-soft:#262c4d; --accent-ink:#10131c;
-  --hl:rgba(212,176,20,.38); --ok:#6cc28f; --warn:#e0a640; --bad:#f08178; color-scheme:dark }}
+  --hl:rgba(212,176,20,.38); --ok:#6cc28f; --warn:#e0a640; --bad:#f08178;
+  --p1:#7ea6ff; --p2:#5fd1a0; --p3:#c99af0; --p4:#f0a868; --keep-bg:#3a3214; --keep-line:#d4b014; --ctx-bg:#222947; color-scheme:dark }}
 :root[data-theme="dark"]{
   --bg:#13161b; --surface:#1b1f26; --surface-2:#222731; --ink:#e5e8ed; --muted:#99a2ad; --line:#2e343e;
   --accent:#9aa6ff; --accent-soft:#262c4d; --accent-ink:#10131c;
-  --hl:rgba(212,176,20,.38); --ok:#6cc28f; --warn:#e0a640; --bad:#f08178; color-scheme:dark }
+  --hl:rgba(212,176,20,.38); --ok:#6cc28f; --warn:#e0a640; --bad:#f08178;
+  --p1:#7ea6ff; --p2:#5fd1a0; --p3:#c99af0; --p4:#f0a868; --keep-bg:#3a3214; --keep-line:#d4b014; --ctx-bg:#222947; color-scheme:dark }
 
 *{box-sizing:border-box}
+/* fiche de synthèse */
+.ai{display:flex;flex-direction:column;gap:12px;min-width:0}
+.ai-empty{padding:16px;border:1px dashed var(--line);border-radius:var(--r);background:var(--surface-2)}
+.fiche{display:flex;flex-direction:column;gap:14px;font-family:var(--f-read);line-height:1.6;max-width:72ch;min-width:0}
+.fiche:empty{display:none}
+.fiche .f{display:flex;flex-direction:column;gap:8px;min-width:0}
+.fiche .f-h{font-family:var(--f-ui);font-size:.74rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
+.fiche .f-ctx{background:var(--ctx-bg);border-radius:var(--r);padding:12px 16px;font-size:1.05rem}
+.fiche .f-ctx .f-h{color:var(--accent)}
+.fiche .f-part{display:flex;align-items:center;gap:10px;margin:6px 0 0;font-family:var(--f-read);font-size:1.05rem;font-weight:600;color:var(--pc)}
+.fiche .f-num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--pc);color:var(--surface);display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-ui);font-size:.8rem;font-weight:600}
+.fiche ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:5px}
+.fiche li::marker{color:var(--muted)}
+.fiche p{margin:0}
+.fiche mark.k{background:linear-gradient(transparent 50%, var(--hl) 50%);color:inherit;font-weight:600;padding:0 2px}
+.fiche .f-facts ul{list-style:none;padding:0}
+.fiche .f-facts li{padding:6px 10px;border-radius:8px;background:var(--surface-2)}
+.fiche .f-facts mark.k{background:none;color:var(--accent);font-family:var(--f-mono);font-size:.92em}
+.fiche .f-keep{background:var(--keep-bg);border:1px solid var(--keep-line);border-radius:var(--r);padding:12px 16px}
+.fiche .f-keep .f-h{color:var(--ink)}
+.fiche .f-keep .f-h::before{content:"★ ";color:var(--keep-line)}
+.fiche .chip{vertical-align:2px}
+.warn-t{color:var(--warn)}
+details.reperes>summary{padding:8px 0}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;
   padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 60px}
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
@@ -352,7 +379,7 @@ const SPINES = ["#2d3c9c", "#7a3b69", "#2b6e62", "#8a5a1f", "#3e5a7a", "#6b4fa0"
 const spineFor = s => SPINES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % SPINES.length];
 const LANGS = [["fra", "Français"], ["eng", "Anglais"], ["spa", "Espagnol"], ["ita", "Italien"], ["deu", "Allemand"], ["lat", "Latin"], ["grc", "Grec ancien"], ["ell", "Grec moderne"]];
 const langName = c => LANGS.find(l => l[0] === c)?.[1] || c;
-const TYPES = [["livre", "Livre"], ["article", "Article"], ["cours", "Cours"], ["rapport", "Rapport / étude"], ["notes", "Notes"], ["autre", "Autre document"]];
+const TYPES = [["livre", "Livre"], ["article", "Article"], ["post", "Publication / réseau social"],["cours", "Cours"], ["rapport", "Rapport / étude"], ["notes", "Notes"], ["autre", "Autre document"]];
 const typeOf = b => TYPES.find(t => t[0] === (b?.type || "livre")) || TYPES[0];
 const isBook = b => (b?.type || "livre") === "livre";
 const W = b => isBook(b)
@@ -414,6 +441,15 @@ const Store = {
     if (this.mode === "db") return this.pageRef(bid, pid).delete();
     const o = this.lsGet(); delete ((o.pages || {})[bid] || {})[pid]; this.lsSet(o);
   },
+  sumCol(bid) { return this.db.doc(this.base() + "/" + bid).collection("fiches"); },
+  async listSums(bid) {
+    if (this.mode === "db") { const s = await this.sumCol(bid).get(); const r = {}; s.docs.forEach(d => r[d.id] = d.data()); return r; }
+    return (this.lsGet().sums || {})[bid] || {};
+  },
+  async saveSum(bid, key, rec) {
+    if (this.mode === "db") return this.sumCol(bid).doc(key).set(rec);
+    const o = this.lsGet(); o.sums = o.sums || {}; (o.sums[bid] = o.sums[bid] || {})[key] = rec; this.lsSet(o);
+  },
 };
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code: "timeout" }), ms))]);
 
@@ -459,6 +495,7 @@ const S = {
   pages: {}, showNewBook: false, editBook: false, addOpen: false, addTab: "photos",
   staged: [], running: false, stopReq: false, answer: null, answerFor: null, editing: null,
   confirmDel: null, resetForms: false, renaming: null, len: LEN[savedLen] ? savedLen : "moyen", pageSum: {},
+  ai: {}, aiRun: null, aiStop: false, chain: null, model: (() => { try { return localStorage.getItem("carnet-model") || "leger"; } catch { return "leger"; } })(),
 };
 const lenOpts = (b, extra = {}) => { const l = LEN[S.len]; return { lang: anaLang(b), overview: l.overview, points: l.points, ratio: l.ratio, ...extra }; };
 const lenCtl = () => `<div class="row small" role="group" aria-label="Longueur du résumé"><span class="muted small">Longueur</span>${Object.entries(LEN).map(([k, v]) => `<button class="${S.len === k ? "primary" : ""} small" style="padding:4px 10px" data-a="len" data-id="${k}" aria-pressed="${S.len === k}">${v.label}</button>`).join("")}</div>`;
@@ -619,47 +656,56 @@ function vSummary(s, opts = {}) {
   </div>`;
 }
 
+function vReperes(s, opts = {}) {
+  const box = (title, items, fn) => arr(items).length ? `<div class="sbox"><span class="label">${title}</span><ul>${arr(items).map(fn).join("")}</ul></div>` : "";
+  const c = opts.noPages ? () => "" : chips;
+  const inner = `<div class="sgrid">
+      ${box("Phrases clés du texte", s.key_points, x => `<li><span>${esc(x.point)}</span>${c(x.pages)}</li>`)}
+      ${box("Dates", s.dates, x => `<li><span class="date">${esc(x.date)}</span><span>${esc(x.event)}</span>${c(x.pages)}</li>`)}
+      ${box("Noms cités (personnes, lieux)", s.people, x => `<li><b>${esc(x.name)}</b><span class="muted small">${esc(x.role)}</span>${c(x.pages)}</li>`)}
+      ${box("Références citées", s.references, x => `<li><span class="ref">${x.marker ? `<sup>${esc(x.marker)}</sup> ` : ""}${esc(x.citation)}</span>${c(x.pages)}</li>`)}
+    </div>
+    ${arr(s.themes).length ? `<div class="sbox"><span class="label">Mots qui reviennent</span><div class="themes">${arr(s.themes).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div></div>` : ""}`;
+  if (!s.key_points.length && !s.dates.length && !s.references.length) return "";
+  return `<details class="reperes"><summary>Repères trouvés dans le texte : dates, noms, références, avec leurs pages</summary><div class="summary" style="margin-top:12px">${inner}</div></details>`;
+}
+
 function vOverview(b) {
-  const w = W(b), all = sortPages(pagesOf(b.id));
+  const all = sortPages(pagesOf(b.id));
   const meta = [["Type", typeOf(b)[1]], ["Auteur", b.author], ["Année", b.year], ["Source", b.publisher], ["Sujet", b.genre], ["Langue", bookLangs(b).map(langName).join(", ")]].filter(x => x[1]).map(([k, v]) => `<span>${k} <b>${esc(v)}</b></span>`).join("");
-  let sum = null;
-  if (all.length) {
-    const chs = chapters(b);
-    const ordered = chs.flatMap(c => chPages(b.id, c.id)).concat(all.filter(p => !chs.some(c => c.id === p.chapterId)));
-    const l = LEN[S.len];
-    sum = analyseCached("book:" + b.id, ordered, lenOpts(b, { overview: Math.max(l.overview, Math.min(l.overview * 2, chs.length * 2 + 2)) }));
-    sum = { ...sum, chapters: chs.length > 1 ? chs.map(c => { const ps = chPages(b.id, c.id); if (!ps.length) return null; const a = analyseCached("ch:" + c.id, ps, lenOpts(b)); return { chapter: c.title, line: a.key_points[0]?.point || "" }; }).filter(Boolean) : [] };
-  }
+  const ps = keyPages(b, "doc");
+  const rep = ps.length ? analyseCached("book:" + b.id, ps, lenOpts(b, { points: 8 })) : null;
   return `<section class="panel">
     ${S.editBook ? `<h2>Informations</h2>${bookForm(b)}<div class="row"><button class="primary" data-a="savebook">Enregistrer</button><button class="ghost" data-a="canceledit">Annuler</button></div>` :
     `<div class="bookhead">${b.example ? `<span><span class="tag">Exemple</span></span>` : ""}<div class="meta">${meta}</div>${b.notes ? `<p class="muted" style="max-width:68ch">${esc(b.notes)}</p>` : ""}</div>
     ${!b.example ? `<div class="row"><button class="ghost" data-a="editbook">Modifier les informations</button>${S.confirmDel === "book" ? `<button class="danger" data-a="delbook">Confirmer : supprimer le document et ses ${all.length} pages</button><button class="ghost" data-a="nodel">Annuler</button>` : `<button class="ghost danger" data-a="askdelbook">Supprimer le document</button>`}</div>` : ""}`}
   </section>
-  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Résumé de tout le document</h2>${sum ? lenCtl() : ""}</div>
-    ${sum ? vSummary(sum, { partsLabel: isBook(b) ? "Chapitres" : "Parties" }) : `<p class="muted">Ajoutez des pages ou collez un texte pour commencer.</p>`}
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Fiche de synthèse : tout le document</h2>${ps.length ? lenCtl() : ""}</div>
+    ${ps.length ? vAI(b, "doc", ps) + vReperes(rep) + vModelPick() : `<p class="muted">Ajoutez des pages ou collez un texte pour commencer.</p>`}
   </section>`;
 }
 
 function vChapter(b, c) {
   if (!c) { S.sel = "overview"; return vOverview(b); }
   const w = W(b), chs = chapters(b);
-  const ps = c.virtual ? sortPages(pagesOf(b.id).filter(p => !chs.some(x => x.id === p.chapterId))) : chPages(b.id, c.id);
-  const sum = ps.length ? analyseCached("ch:" + c.id, ps, lenOpts(b)) : null;
+  const key = "ch:" + c.id;
+  const ps = keyPages(b, key);
+  const rep = ps.length ? analyseCached(key, ps, lenOpts(b)) : null;
   const others = chs.filter(x => x.id !== c.id);
   const pcard = p => {
-    const a = analyseCached("p:" + p.id, [p], { lang: anaLang(b), overview: 1, points: 3 });
-    const editing = S.editing === p.id, open = S.pageSum[p.id];
+    const pk = "page:" + p.id, hasFiche = (S.ai[b.id] || {})[pk];
+    const running = S.aiRun && S.aiRun.key === pk;
+    const editing = S.editing === p.id, open = running || (S.pageSum[p.id] !== false && (S.pageSum[p.id] || hasFiche));
     return `<article class="pagecard" id="pg-${esc(p.id)}">
-    <div class="row" style="justify-content:space-between"><span class="pno">${p.page ? "Page " + esc(p.page) : "Page sans numéro"}</span><span class="muted small">${p.source === "photo" ? "photo" : "texte collé"}</span></div>
+    <div class="row" style="justify-content:space-between"><span class="pno">${p.page ? "Page " + esc(p.page) : "Page sans numéro"}</span><span class="muted small">${p.source === "photo" ? "photo" : "texte collé"}${hasFiche ? " · fiche prête" : ""}</span></div>
     ${editing ? `<div class="formgrid"><label class="field"><span>Numéro de page</span><input id="ed-page-${p.id}" value="${esc(p.page ?? "")}"></label></div>
       <label class="field"><span>Texte de la page</span><textarea id="ed-text-${p.id}" style="min-height:260px">${esc(p.text)}</textarea></label>
       <div class="row"><button class="primary" data-a="saveedit" data-id="${p.id}">Enregistrer</button><button class="ghost" data-a="canceledit2">Annuler</button></div>` : open ? `
-    <div class="row" style="justify-content:space-between"><span class="label">Résumé de toute la page</span>${lenCtl()}</div>
-    ${vSummary(analyseCached("ps:" + p.id, [p], lenOpts(b)), { noPages: true, noNote: true })}
-    <div class="row"><button class="ghost small" data-a="pagesum" data-id="${p.id}">Fermer le résumé</button></div>` : `
-    ${a.key_points.length ? `<ul>${a.key_points.map(k => `<li>${esc(k.point)}</li>`).join("")}</ul>` : `<p class="muted small">Aucune phrase lisible repérée sur cette page.</p>`}
-    ${a.dates.length ? `<div class="small">${a.dates.map(d => `<span class="date">${esc(d.date)}</span>`).join(" · ")}</div>` : ""}
-    ${a.references.length ? `<div class="small"><span class="label">Références</span>${a.references.map(r => `<div class="ref">${r.marker ? `<sup>${esc(r.marker)}</sup> ` : ""}${esc(r.citation)}</div>`).join("")}</div>` : ""}`}
+    <div class="row" style="justify-content:space-between"><span class="label">Fiche de synthèse de la page</span>${lenCtl()}</div>
+    ${vAI(b, pk, [p])}
+    ${vReperes(analyseCached("ps:" + p.id, [p], lenOpts(b)), { noPages: true })}
+    ${running ? "" : `<div class="row"><button class="ghost small" data-a="pageclose" data-id="${p.id}">Replier</button></div>`}` : `
+    <p class="muted small" style="max-width:68ch">${esc((p.text || "").replace(/\s+/g, " ").slice(0, 220))}${(p.text || "").length > 220 ? "…" : ""}</p>`}
     ${!editing && p.text ? `<details><summary>Voir le texte de la page</summary><div class="transcript">${esc(p.text)}</div></details>` : ""}
     ${!editing ? `<div class="row small">${!open ? `<button class="small" data-a="pagesum" data-id="${p.id}">Résumer cette page</button>` : ""}${!b.example ? `<button class="ghost small" data-a="edit" data-id="${p.id}">Corriger le texte</button><label class="muted small" for="mv-${p.id}">Déplacer vers</label><select id="mv-${p.id}" data-a="move" data-id="${p.id}" style="width:auto;max-width:100%"><option value="">—</option>${others.map(o => `<option value="${o.id}">${esc(o.title)}</option>`).join("")}</select><button class="ghost danger small" data-a="delpage" data-id="${p.id}">${S.confirmDel === p.id ? "Confirmer la suppression" : "Supprimer"}</button>` : ""}</div>` : ""}
   </article>`;
@@ -670,14 +716,273 @@ function vChapter(b, c) {
       ${!b.example && !c.virtual ? `<div class="row"><button class="ghost" data-a="renamech">Renommer</button>${S.confirmDel === c.id ? `<button class="danger" data-a="delch">Confirmer (les pages sont gardées)</button>` : `<button class="ghost danger" data-a="askdelch">Supprimer</button>`}</div>` : ""}</div>
     ${S.renaming === c.id ? `<div class="row"><input id="rename" class="grow" style="flex:1" value="${esc(c.title)}"><button class="primary" data-a="saverename">OK</button></div>` : ""}
   </section>
-  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Résumé de ${c.virtual ? "ces pages" : w.all}</h2>${sum ? lenCtl() : ""}</div>
-    ${sum ? vSummary(sum) : `<p class="muted">Pas encore de pages ici.</p>`}
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Fiche de synthèse : ${c.virtual ? "ces pages" : w.all}</h2>${ps.length ? lenCtl() : ""}</div>
+    ${ps.length ? vAI(b, key, ps) + vReperes(rep) : `<p class="muted">Pas encore de pages ici.</p>`}
   </section>
   ${ps.length ? `<section class="panel"><h2>Chercher dans ${c.virtual ? "ces pages" : w.this}</h2>
     <div class="row"><input id="ask" class="grow" style="flex:1" placeholder="Une question ou des mots-clés"><button class="primary" data-a="ask">Chercher</button></div>
     ${ans ? (ans.length ? `<div class="answer"><span class="muted small">Passages qui répondent le mieux :</span>${ans.map(x => `<blockquote><span>${esc(x.s)}</span>${chips([x.page])}</blockquote>`).join("")}</div>` : `<p class="muted">Aucun passage ne correspond. Essayez d'autres mots.</p>`) : ""}
   </section>` : ""}
   <section class="pages"><h2>Pages <span class="muted small">(${ps.length})</span></h2>${ps.map(pcard).join("") || `<p class="muted">Aucune page.</p>`}</section>`;
+}
+
+/* ---------- IA sur l'appareil (WebLLM) ---------- */
+const MODELS = {
+  leger: { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", id32: "Qwen2.5-1.5B-Instruct-q4f32_1-MLC", label: "Léger : rapide, pour téléphone", size: "1 Go" },
+  precis: { id: "Qwen2.5-3B-Instruct-q4f16_1-MLC", id32: "Qwen2.5-3B-Instruct-q4f32_1-MLC", label: "Précis : meilleures fiches, ordinateur ou téléphone récent", size: "2 Go" },
+};
+const GH_URL = "https://ticoq971.github.io/carnet-de-lecture/";
+const IA = {
+  engine: null, modelKey: null, loading: null,
+  inClaude: !!window.claude,
+  async support() {
+    if (this.inClaude) return { ok: false, why: "claude" };
+    if (!navigator.gpu) return { ok: false, why: "webgpu" };
+    try { const a = await navigator.gpu.requestAdapter(); if (!a) return { ok: false, why: "webgpu" }; return { ok: true, f16: a.features.has("shader-f16") }; }
+    catch { return { ok: false, why: "webgpu" }; }
+  },
+  async get(onProg) {
+    const key = S.model;
+    if (this.engine && this.modelKey === key) return this.engine;
+    if (this.loading) return this.loading;
+    this.loading = (async () => {
+      const sup = await this.support(); if (!sup.ok) throw { why: sup.why };
+      if (this.engine) { try { await this.engine.unload(); } catch {} this.engine = null; }
+      const webllm = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.87/lib/index.js");
+      const m = MODELS[key] || MODELS.leger;
+      // Dans la page (pas dans un worker) : WebGPU y est disponible partout où il existe.
+      const appConfig = { ...webllm.prebuiltAppConfig, useIndexedDBCache: true };
+      const eng = await webllm.CreateMLCEngine(sup.f16 ? m.id : m.id32, { appConfig, initProgressCallback: p => onProg?.(p) }, { context_window_size: 8192 });
+      this.engine = eng; this.modelKey = key; return eng;
+    })().finally(() => { this.loading = null; });
+    return this.loading;
+  },
+  async chat(messages, { max_tokens, onText }) {
+    const chunks = await this.engine.chat.completions.create({ messages, stream: true, temperature: 0.3, top_p: 0.9, max_tokens, frequency_penalty: 0.2 });
+    let text = "";
+    for await (const c of chunks) { const d = c.choices?.[0]?.delta?.content || ""; if (d) { text += d; onText?.(text); } }
+    return text.trim();
+  },
+};
+const aiErr = e => e?.why === "claude" ? "La fiche par IA marche sur le site GitHub de l'application, pas sur ce lien Claude."
+  : e?.why === "webgpu" ? "Ce navigateur ne peut pas faire tourner l'IA (WebGPU manquant). Sur iPhone : iOS 26 ou plus récent, avec Safari. Sur Android ou ordinateur : Chrome ou Edge à jour."
+  : e?.code === "stop" ? "Fiche arrêtée."
+  : "L'IA n'a pas pu terminer : " + (e?.message || String(e)).slice(0, 160) + ". Si l'appareil manque de mémoire, choisissez le modèle Léger.";
+
+const SYS = "Tu rédiges des fiches de synthèse en français, claires, logiques et hiérarchisées, comme un excellent assistant de révision. Avant d'écrire, comprends le texte : son sujet, qui parle, ce qui est affirmé, et la logique qui relie les idées (chronologie, cause et conséquence, argument et exemple). Ensuite, organise la fiche selon cette logique. Tu peux reprendre les mots du texte quand ils sont justes, mais tu ne recopies pas des phrases entières au hasard : tu sélectionnes, tu regroupes et tu mets en avant l'essentiel. Tu n'ajoutes aucune information qui n'est pas dans le texte et tu n'oublies aucun élément important.";
+const LENP = { court: ["courte (environ 120 mots, 2 ou 3 parties)", 520], moyen: ["moyenne (environ 250 mots, 3 ou 4 parties)", 850], long: ["détaillée (environ 450 mots, 4 ou 5 parties avec plus de détails)", 1300] };
+function docLine(b) { return `Document : ${typeOf(b)[1].toLowerCase()} « ${b.title} »${b.author ? " de " + b.author : ""}${b.publisher ? " (" + b.publisher + ")" : ""}.${b.notes ? " Note du lecteur : " + b.notes : ""}`; }
+function chunkPages(ps, max) {
+  const out = []; let cur = "";
+  for (const p of ps) {
+    let t = `[p. ${p.page ?? "?"}]\n${(p.text || "").trim()}\n\n`;
+    while (t.length > max) { if (cur) { out.push(cur); cur = ""; } out.push(t.slice(0, max)); t = t.slice(max); }
+    if (cur.length + t.length > max && cur) { out.push(cur); cur = ""; }
+    cur += t;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+const notesMsgs = (b, chunk) => [{ role: "system", content: SYS }, { role: "user", content: `${docLine(b)}
+Voici un extrait, lu sur des photos : il peut contenir des erreurs de lecture et des éléments d'interface à ignorer (boutons, menus, compteurs de « j'aime », « Répondre », « Republier », heures, noms d'application).
+Prends des notes complètes et fidèles en français, en puces courtes. Garde TOUS les faits importants : idées, arguments, chiffres, dates, noms, conclusions. Indique la page entre parenthèses, par exemple (p. 12). Pas d'introduction, seulement les puces.
+
+EXTRAIT :
+${chunk}` }];
+function ficheMsgs(b, scope, source, fromNotes, lenKey = S.len, fromFiches = "") {
+  const [len] = LENP[lenKey] || LENP.moyen;
+  const intro = fromFiches
+    ? `Voici les fiches déjà rédigées pour ${fromFiches}, dans l'ordre. Construis à partir d'elles UNE fiche d'ensemble cohérente ${scope} : suis le fil logique du début à la fin, regroupe ce qui se répète, et garde les numéros de page.`
+    : fromNotes ? `Voici des notes prises sur le texte ${scope}, dans l'ordre.`
+    : `Voici le texte ${scope}, lu sur des photos : ignore les erreurs de lecture et les éléments d'interface (boutons, menus, compteurs de « j'aime », « Répondre », « Republier », heures).`;
+  return [{ role: "system", content: SYS }, { role: "user", content: `${docLine(b)}
+${intro}
+Rédige une fiche de synthèse ${len}, en français même si le texte est dans une autre langue, avec EXACTEMENT ce plan :
+
+## En bref
+Deux phrases maximum qui posent le contexte : de quoi il s'agit, qui parle ou qui est concerné, quand, et pourquoi c'est important.
+
+## Les grandes parties
+### Titre court de la première partie
+- Idée reformulée en une phrase, avec 1 à 3 **mots importants en gras** (p. 12)
+- …
+### Titre court de la partie suivante
+- …
+
+## Chiffres, dates et noms clés
+- **date, chiffre ou nom** : ce qu'il représente (p. 12)
+
+## À retenir
+- Une à trois phrases : l'essentiel à garder en tête.
+
+Règles : reformule, ne recopie pas ; regroupe les idées proches dans la même partie ; n'oublie aucun élément important ; mets la page entre parenthèses quand elle est connue ; supprime la section « Chiffres, dates et noms clés » s'il n'y en a aucun ; rien après « À retenir ».
+
+${fromFiches ? "FICHES" : fromNotes ? "NOTES" : "TEXTE"} :
+${source}` }];
+}
+const fresh = (b, key, ps) => { const r = (S.ai[b.id] || {})[key]; return r && r.sig === aiSig(ps) ? r : null; };
+// Pour un chapitre : les fiches des pages. Pour le document : les fiches des chapitres. Seulement si elles sont toutes prêtes.
+function subFiches(b, key) {
+  if (key.startsWith("ch:")) {
+    const ps = keyPages(b, key); if (ps.length < 2) return null;
+    const f = ps.map(p => { const r = fresh(b, "page:" + p.id, [p]); return r ? `[Page ${p.page ?? "?"}]\n${r.text}` : null; });
+    return f.every(Boolean) ? { items: f, what: "chaque page" } : null;
+  }
+  if (key === "doc") {
+    const chs = chapters(b).filter(c => keyPages(b, "ch:" + c.id).length); if (chs.length < 2) return null;
+    const f = chs.map(c => { const r = fresh(b, "ch:" + c.id, keyPages(b, "ch:" + c.id)); return r ? `### ${c.title}\n${r.text}` : null; });
+    return f.every(Boolean) ? { items: f, what: "chaque " + W(b).one } : null;
+  }
+  return null;
+}
+function pack(items, max) { const out = []; let cur = ""; for (const t of items) { if (cur && cur.length + t.length > max) { out.push(cur); cur = ""; } cur += (cur ? "\n\n" : "") + t.slice(0, max); } if (cur) out.push(cur); return out; }
+const pageLen = () => S.len === "long" ? "moyen" : "court";
+
+// Résume tout en cascade : chaque page, puis le chapitre (à partir des fiches des pages), puis le document.
+async function runChain(key) {
+  const b = book(); if (!b || S.aiRun || S.chain) return;
+  const steps = [];
+  const addCh = ck => {
+    const ps = keyPages(b, ck).filter(p => (p.text || "").trim()); if (!ps.length) return;
+    let pending = 0;
+    if (ps.length > 1) ps.forEach(p => { if (!fresh(b, "page:" + p.id, [p])) { steps.push("page:" + p.id); pending++; } });
+    if (pending || !fresh(b, ck, ps)) steps.push(ck);
+  };
+  if (key === "doc") {
+    chapters(b).forEach(c => addCh("ch:" + c.id));
+    if (keyPages(b, "ch:_none").length) addCh("ch:_none");
+    steps.push("doc");
+  } else addCh(key);
+  if (!steps.length) { toast("Toutes les fiches sont déjà à jour."); return; }
+  S.chain = { stop: false, label: "", n: steps.length, i: 0 };
+  for (let i = 0; i < steps.length; i++) {
+    if (S.chain.stop) break;
+    S.chain.i = i; S.chain.label = `Étape ${i + 1} sur ${steps.length}`;
+    const ok = await runAI(steps[i], { chain: true });
+    if (!ok) break;
+  }
+  S.chain = null; render();
+}
+
+function keyPages(b, key) {
+  const chs = chapters(b);
+  if (key === "doc") { const all = pagesOf(b.id); return chs.flatMap(c => chPages(b.id, c.id)).concat(sortPages(all.filter(p => !chs.some(c => c.id === p.chapterId)))); }
+  if (key === "ch:_none") return sortPages(pagesOf(b.id).filter(p => !chs.some(c => c.id === p.chapterId)));
+  if (key.startsWith("ch:")) return chPages(b.id, key.slice(3));
+  if (key.startsWith("page:")) return pagesOf(b.id).filter(p => p.id === key.slice(5));
+  return [];
+}
+const aiSig = ps => ps.map(p => p.id + ":" + (p.text || "").length).join(",");
+function scopeName(b, key) {
+  if (key === "doc") return "de tout le document";
+  if (key.startsWith("page:")) return "d'une page";
+  if (key === "ch:_none") return "de plusieurs pages";
+  return isBook(b) ? "d'un chapitre entier" : "d'une partie entière";
+}
+
+async function runAI(key, opt = {}) {
+  const b = book(); if (!b) return false;
+  if (S.aiRun) { toast("Une fiche est déjà en cours de rédaction."); return false; }
+  if (S.chain && !opt.chain) { toast("Les fiches sont en cours de rédaction."); return false; }
+  const ps = keyPages(b, key).filter(p => (p.text || "").trim()); if (!ps.length) { toast("Pas de texte à résumer."); return false; }
+  S.aiRun = { bid: b.id, key, text: "", status: "Préparation de l'IA…", pct: 0 }; S.aiStop = false;
+  if (key.startsWith("page:")) S.pageSum[key.slice(5)] = true;
+  render();
+  let ok = false;
+  try {
+    await IA.get(p => { S.aiRun.status = IA.engine ? "Chargement…" : `Chargement de l'IA sur votre appareil : ${Math.round((p.progress || 0) * 100)} %` + ((p.progress || 0) < 1 && !/cache/i.test(p.text || "") ? " (téléchargement la première fois, ≈" + (MODELS[S.model] || MODELS.leger).size + ")" : ""); S.aiRun.pct = p.progress || 0; paintAI(); });
+    const sub = subFiches(b, key);
+    const lenKey = key.startsWith("page:") && opt.chain ? pageLen() : S.len;
+    let parts = sub ? pack(sub.items, 9000) : chunkPages(ps, 7000), fromNotes = !!sub, round = 0;
+    while (parts.length > 1 && round < 3) {
+      const notes = [];
+      for (let i = 0; i < parts.length; i++) {
+        if (S.aiStop) throw { code: "stop" };
+        S.aiRun.status = `Lecture ${round ? "des notes" : "du texte"} : extrait ${i + 1} sur ${parts.length}…`; S.aiRun.pct = i / parts.length; S.aiRun.text = ""; paintAI();
+        notes.push(await IA.chat(notesMsgs(b, parts[i]), { max_tokens: 480, onText: t => { S.aiRun.text = "Prise de notes…\n\n" + t; paintAI(); } }));
+      }
+      parts = chunkPages([{ page: "notes", text: notes.join("\n") }], 9000).map(x => x.replace(/^\[p\. notes\]\n/, ""));
+      fromNotes = true; round++;
+    }
+    if (S.aiStop) throw { code: "stop" };
+    S.aiRun.status = "Rédaction de la fiche…"; S.aiRun.pct = 1; S.aiRun.text = ""; paintAI();
+    const text = await IA.chat(ficheMsgs(b, scopeName(b, key), parts[0], fromNotes, lenKey, sub && round === 0 ? sub.what : ""), { max_tokens: (LENP[lenKey] || LENP.moyen)[1], onText: t => { S.aiRun.text = t; paintAI(); } });
+    if (S.aiStop) throw { code: "stop" };
+    const rec = { text, len: lenKey, sig: aiSig(ps), at: Date.now(), model: S.model };
+    (S.ai[b.id] = S.ai[b.id] || {})[key] = rec;
+    if (!b.example) await Store.saveSum(b.id, key, rec).catch(() => toast("Fiche affichée, mais pas enregistrée."));
+    ok = true;
+  } catch (e) {
+    toast(aiErr(e));
+    if (e?.code !== "stop" && /dispos|device|lost|memory|GPU/i.test(String(e?.message || e))) { try { IA.engine?.unload(); } catch {} IA.engine = null; }
+  }
+  S.aiRun = null; render();
+  return ok;
+}
+let aiPaintQueued = false;
+function paintAI() {
+  if (aiPaintQueued) return; aiPaintQueued = true;
+  requestAnimationFrame(() => {
+    aiPaintQueued = false; if (!S.aiRun) return;
+    const s = $("#ai-status"), bar = $("#ai-bar"), t = $("#ai-text");
+    if (s) s.textContent = (S.chain ? S.chain.label + " · " : "") + S.aiRun.status; if (bar) bar.style.width = Math.round(S.aiRun.pct * 100) + "%"; if (t) t.innerHTML = md(S.aiRun.text);
+  });
+}
+
+/* Rendu de la fiche : titres, parties numérotées en couleur, mots-clés surlignés, encadré « À retenir » */
+function md(src) {
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<mark class="k">$1</mark>')
+    .replace(/__(.+?)__/g, '<mark class="k">$1</mark>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/\(\s*(?:p\.|pp\.|page|pages)\s*([0-9]{1,4}|[IVXLC]{1,6})(?:\s*[-–,]\s*[0-9]{1,4})*\s*\)/gi, (m, p) => ` <button class="chip" data-a="goto" data-id="${p}">p. ${p}</button>`);
+  let html = "", list = false, sec = false, part = 0;
+  const closeList = () => { if (list) { html += "</ul>"; list = false; } };
+  const closeSec = () => { closeList(); if (sec) { html += "</section>"; sec = false; } };
+  for (const raw of String(src || "").replace(/\r/g, "").split("\n")) {
+    const line = raw.trimEnd();
+    let m;
+    if ((m = line.match(/^\s*#{1,2}\s+(.*)$/))) {
+      closeSec();
+      const name = m[1].replace(/\*\*/g, "").replace(/[:：]\s*$/, "");
+      const cls = /bref|contexte|résumé/i.test(name) ? "ctx" : /retenir|essentiel|conclusion/i.test(name) ? "keep" : /chiffre|date|nom|clé/i.test(name) ? "facts" : /partie|idée|point/i.test(name) ? "parts" : "other";
+      html += `<section class="f f-${cls}"><h3 class="f-h">${esc(name)}</h3>`; sec = true;
+    } else if ((m = line.match(/^\s*#{3,6}\s+(.*)$/))) {
+      closeList(); part++;
+      html += `<h4 class="f-part" style="--pc:var(--p${(part - 1) % 4 + 1})"><span class="f-num">${part}</span><span>${inline(m[1].replace(/\*\*/g, ""))}</span></h4>`;
+    } else if ((m = line.match(/^\s*(?:[-*•–]|\d+[.)])\s+(.*)$/))) {
+      if (!list) { html += "<ul>"; list = true; }
+      html += `<li>${inline(m[1])}</li>`;
+    } else if (!line.trim()) { closeList(); }
+    else { closeList(); html += `<p>${inline(line)}</p>`; }
+  }
+  closeSec();
+  return html;
+}
+
+// Progression des fiches d'un chapitre ou du document : combien de pages ont déjà leur fiche
+function chainInfo(b, key) {
+  if (key === "doc") { const chs = chapters(b).filter(c => keyPages(b, "ch:" + c.id).length); return { done: chs.filter(c => fresh(b, "ch:" + c.id, keyPages(b, "ch:" + c.id))).length, total: chs.length, unit: W(b).many }; }
+  const ps = keyPages(b, key); return { done: ps.filter(p => fresh(b, "page:" + p.id, [p])).length, total: ps.length, unit: "pages" };
+}
+function vAI(b, key, ps) {
+  const st = (S.ai[b.id] || {})[key];
+  const run = S.aiRun && S.aiRun.bid === b.id && S.aiRun.key === key;
+  const busy = !!(S.aiRun || S.chain);
+  const multi = !key.startsWith("page:") && (key === "doc" ? chapters(b).length > 1 : ps.length > 1);
+  const ci = multi ? chainInfo(b, key) : null;
+  const chainBtn = multi && !IA.inClaude ? `<button class="${st ? "" : "primary"}" data-a="aichain" data-id="${key}" ${busy ? "disabled" : ""}>${key === "doc" ? `Tout résumer : chaque page, chaque ${W(b).one}, puis le document` : `Résumer chaque page, puis ${W(b).the}`}</button>` : "";
+  const ciLine = ci ? `<span class="muted small">${ci.done} ${ci.unit} sur ${ci.total} ${ci.done > 1 ? "ont" : "a"} déjà leur fiche</span>` : "";
+  if (run) return `<div class="ai"><div class="field"><span id="ai-status">${esc((S.chain ? S.chain.label + " · " : "") + S.aiRun.status)}</span><div class="progress"><i id="ai-bar" style="width:${Math.round(S.aiRun.pct * 100)}%"></i></div></div><div class="fiche" id="ai-text">${md(S.aiRun.text)}</div><div><button data-a="aistop">Arrêter</button></div></div>`;
+  const chainNote = S.chain && !run && multi ? `<p class="banner">${esc(S.chain.label)} : rédaction des fiches en cours, page par page. Faites défiler pour les voir apparaître.</p>` : "";
+  if (st) return `<div class="ai">${chainNote}<div class="fiche">${md(st.text)}</div><div class="row small muted">Rédigée par l'IA sur votre appareil · ${esc(LEN[st.len]?.label || "")}${st.sig !== aiSig(ps) ? ` · <b class="warn-t">des pages ont changé depuis</b>` : ""}<button class="small" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>Refaire</button>${chainBtn}${ciLine}</div></div>`;
+  if (IA.inClaude) return `<div class="ai ai-empty"><p>Les fiches de synthèse par IA (contexte, grandes parties, mots-clés en couleur, « À retenir ») marchent sur le site de l'application : <a href="${GH_URL}" target="_blank" rel="noopener">${GH_URL.replace("https://", "")}</a>. L'IA y tourne sur votre appareil ; ce lien Claude ne peut pas la télécharger.</p></div>`;
+  return `<div class="ai ai-empty">${chainNote}<div class="row">${chainBtn}<button class="${multi ? "" : "primary"}" data-a="airun" data-id="${key}" ${busy ? "disabled" : ""}>${multi ? "Fiche directe (plus rapide)" : "Rédiger la fiche de synthèse"}</button>${ciLine}</div>
+    <p class="muted small">${multi ? "« Résumer chaque page » donne une fiche par page, puis une fiche d'ensemble construite à partir d'elles : plus long, mais plus fidèle et plus cohérent. " : ""}${IA.engine ? "L'IA est prête." : `La première fois, l'IA (≈${(MODELS[S.model] || MODELS.leger).size}) se télécharge sur votre appareil, puis reste disponible, même hors ligne. Rien n'est envoyé sur internet.`}</p></div>`;
+}
+function vModelPick() {
+  if (IA.inClaude) return "";
+  return `<label class="field" style="max-width:420px"><span>IA utilisée pour les fiches</span><select id="model-sel">${Object.entries(MODELS).map(([k, m]) => `<option value="${k}" ${S.model === k ? "selected" : ""}>${m.label} (≈${m.size})</option>`).join("")}</select></label>`;
 }
 
 /* ---------- photos ---------- */
@@ -806,7 +1111,8 @@ async function openBook(id) {
   if (id !== EX_ID && !S.pages[id]) {
     render();
     try { S.pages[id] = await withTimeout(Store.listPages(id), 12000); }
-    catch { S.pages[id] = []; toast("Les pages n'ont pas pu être chargées. Vérifiez la connexion puis rouvrez le livre."); }
+    catch { S.pages[id] = []; toast("Les pages n'ont pas pu être chargées. Vérifiez la connexion puis rouvrez le document."); }
+    try { S.ai[id] = await withTimeout(Store.listSums(id), 12000); } catch { S.ai[id] = S.ai[id] || {}; }
   }
   if (id !== EX_ID && !S.pages[id].length) { S.addOpen = true; S.addTab = isBook(book()) ? "photos" : "texte"; }
   render(); window.scrollTo(0, 0);
@@ -817,6 +1123,9 @@ app.addEventListener("click", async e => {
   const a = t.dataset.a, id = t.dataset.id, b = book();
   if (!["delpage", "delbook", "delch", "askdelbook", "askdelch"].includes(a)) S.confirmDel = null;
   switch (a) {
+    case "airun": runAI(id); break;
+    case "aichain": runChain(id); break;
+    case "aistop": S.aiStop = true; if (S.chain) S.chain.stop = true; try { IA.engine?.interruptGenerate(); } catch {} break;
     case "newbook": S.showNewBook = true; S.view = "library"; render(); $("#bf-title")?.focus(); break;
     case "cancelbook": S.showNewBook = false; S.resetForms = true; render(); break;
     case "createbook": {
@@ -859,7 +1168,8 @@ app.addEventListener("click", async e => {
     }
     case "edit": S.editing = id; render(); break;
     case "len": S.len = id; try { localStorage.setItem("carnet-len", id); } catch {} render(); break;
-    case "pagesum": S.pageSum[id] = !S.pageSum[id]; render(); break;
+    case "pagesum": S.pageSum[id] = true; render(); break;
+    case "pageclose": S.pageSum[id] = false; render(); break;
     case "canceledit2": S.editing = null; render(); break;
     case "saveedit": {
       const p = pagesOf(b.id).find(x => x.id === id); if (!p) return;
@@ -921,6 +1231,7 @@ async function importFile(file) {
 app.addEventListener("change", async e => {
   const t = e.target;
   if (t.id === "imp" && t.files?.[0]) { const f = t.files[0]; t.value = ""; importFile(f); return; }
+  if (t.id === "model-sel") { S.model = t.value; try { localStorage.setItem("carnet-model", t.value); } catch {} toast("IA choisie : " + MODELS[t.value].label.split(" :")[0] + ". Elle se chargera à la prochaine fiche."); return; }
   if (t.dataset?.a !== "move" || !t.value) return;
   const b = book(), p = pagesOf(b.id).find(x => x.id === t.dataset.id); if (!p) return;
   p.chapterId = t.value;
