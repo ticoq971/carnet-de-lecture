@@ -540,6 +540,37 @@ const Analyse = (() => {
       }
     }
 
+    // 0b. Intro pour tout texte : de quoi (ou de qui) on parle, la période, les noms cités.
+    {
+      const bio = !!introMd;
+      let label = "";
+      if (!bio && N >= 3) {
+        const l0 = String((pages[0] && pages[0].text) || "").split(/\n/)[0].trim();
+        const l1 = l0.replace(/^(?:chapitre|chapter|capítulo|capitolo|kapitel|caput|partie|part|parte|teil)\s+[\wIVXivx]+\s*[—–:\-.]*\s*/i, "");
+        const t0 = l1.length >= 3 ? l1 : l0;
+        label = subject || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
+        if (!label) { const pn = a.people.map(p => p.name.replace(/[.,;]+$/, "")).find(n => cnt(n) >= 2); if (pn) label = pn; }
+        if (!label) { const kt = [...keyTerms][0]; label = kt ? cap(form(kt)) : ""; }
+        const last = label.toLowerCase().split(/\s+/).pop();
+        const cand = its.slice(0, 3).find(it => last && !used.has(it.k) && !PRON.test(it.s) && it.s.toLowerCase().includes(last)) || its.find(it => !used.has(it.k) && !PRON.test(it.s)) || its.find(it => !used.has(it.k));
+        if (label && cand) {
+          introMd = `## ${H[5] || "Présentation"}\n**${label}** : ${bold(shorten(resolve(unlead(cand.s)), 260), 0)}${ref(cand.page)}\n`;
+          used.add(cand.k);
+        }
+      }
+      if (introMd) {
+        const extra = [];
+        if (!bio) {
+          const ys = [...new Set(a.dates.map(d => (String(d.date).match(/\b(1\d{3}|20\d{2})\b/) || [])[1]).filter(Boolean).map(Number))].sort((x, y) => x - y);
+          if (ys.length >= 2 && ys[ys.length - 1] - ys[0] >= 1) extra.push(`**${H[6] || "Période"}** : ${ys[0]} – ${ys[ys.length - 1]}`);
+        }
+        const skip = new Set([label, subject].filter(Boolean).map(x => x.toLowerCase()));
+        const nm = a.people.map(p => p.name.replace(/[.,;]+$/, "")).filter(n => n.length > 2 && cnt(n) >= 1 && !skip.has(n.toLowerCase()) && !(label && (label.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(label.toLowerCase())))).slice(0, 5);
+        if (nm.length) extra.push(`**${H[7] || "Noms cités"}** : ${nm.join(", ")}`);
+        introMd = introMd.replace(/\n+$/, "\n") + extra.map(x => "- " + x).join("\n") + (extra.length ? "\n" : "") + "\n";
+      }
+    }
+
     // 1. En bref : les phrases les plus centrales, le début du texte un peu favorisé.
     const bref = take(its, Math.min(P.bref, Math.max(1, Math.floor(N / 3))), it => it.k < 3 ? 1.25 : 1);
 
@@ -744,11 +775,11 @@ const SPINES = ["#2d3c9c", "#7a3b69", "#2b6e62", "#8a5a1f", "#3e5a7a", "#6b4fa0"
 const spineFor = s => SPINES[[...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % SPINES.length];
 // Langues dans lesquelles l'IA rédige les fiches et traduit (le latin et le grec sont lus, pas produits)
 const OUT = {
-  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page", "Présentation"] },
-  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways", "Page by page", "Introduction"] },
-  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar", "Página por página", "Presentación"] },
-  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare", "Pagina per pagina", "Presentazione"] },
-  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken", "Seite für Seite", "Vorstellung"] },
+  fra: { label: "Français", name: "français", h: ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page", "Présentation", "Période", "Noms cités"] },
+  eng: { label: "Anglais", name: "anglais", h: ["In short", "Main parts", "Key figures, dates and names", "Key takeaways", "Page by page", "Introduction", "Period", "Names mentioned"] },
+  spa: { label: "Espagnol", name: "espagnol", h: ["En resumen", "Partes principales", "Cifras, fechas y nombres clave", "Para recordar", "Página por página", "Presentación", "Período", "Nombres citados"] },
+  ita: { label: "Italien", name: "italien", h: ["In breve", "Parti principali", "Cifre, date e nomi chiave", "Da ricordare", "Pagina per pagina", "Presentazione", "Periodo", "Nomi citati"] },
+  deu: { label: "Allemand", name: "allemand", h: ["Kurz gesagt", "Hauptteile", "Wichtige Zahlen, Daten und Namen", "Merken", "Seite für Seite", "Vorstellung", "Zeitraum", "Genannte Namen"] },
 };
 const LANGS = [["fra", "Français"], ["eng", "Anglais"], ["spa", "Espagnol"], ["ita", "Italien"], ["deu", "Allemand"], ["lat", "Latin"], ["grc", "Grec ancien"], ["ell", "Grec moderne"]];
 const langName = c => LANGS.find(l => l[0] === c)?.[1] || c;
