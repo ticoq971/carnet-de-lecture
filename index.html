@@ -816,6 +816,7 @@ const Analyse = (() => {
     // 3b. « Qui, quand, quoi » : on lit le texte phrase par phrase en suivant de qui on parle.
     // Chaque pronom (il, elle…) renvoie à la dernière personne ou chose nommée, et chaque date est rattachée à celui dont elle parle.
     const chrono = [];
+    let entOf = () => null;
     {
       const BADN = /^(?:Auprès|Après|Grâce|Dans|Selon|Pour|Avec|Sous|Vers|Sur|Chez|Lors|Depuis|Malgré|Durant|Pendant|After|Before|During|With|Under|From|According|Despite|Since|Among|Después|Durante|Según|Dopo|Secondo|Nach|Während|Laut|The|Le|La|Les|Un|Une|Il|Elle|He|She)\b/;
       const names = [introHead && introHead.label, subject, ...a.people.map(p => p.name.replace(/[.,;]+$/, ""))].filter(n => n && n.length > 2 && !BADN.test(n) && !/(?:\b(?:St|Mme|Mr|Dr|Sr|Jr|Mgr|Ste)|-)$/.test(n) && cnt(n) >= 2 && (n === subject || (introHead && n === introHead.label) || /\s/.test(n) || !lowAll.has(n.toLowerCase()))).slice(0, 10);
@@ -895,6 +896,7 @@ const Analyse = (() => {
         if (before && !/^(?:en|le|la|au|dès|vers|in|on|by|après|avant|lors|pendant|depuis|puis|ensuite|alors|enfin|mais|et|ainsi|plus tard|later|then|then,|en\s+\d{4}|le\s+\d+)\b[^,;:]{0,45}[,]?$/i.test(before)) return null;
         return best.e;
       };
+      entOf = mention;
       // 1re passe : le genre d'un nom se lit dans le pronom de la phrase suivante
       const heads = its.map(it => mention(it.s));
       ents.forEach(e => { e.m = 0; e.f = 0; });
@@ -943,6 +945,27 @@ const Analyse = (() => {
       }
     }
 
+    // À retenir, version « lecture » : une idée forte par personnage ou sujet principal, sans refaire les événements déjà datés plus haut
+    {
+      const NSENT = its.length;
+      const tops = new Map();
+      for (const it of its) { const e = entOf(it.s); if (e) tops.set(e, (tops.get(e) || 0) + 1); }
+      const ranked = [...tops.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(x => x[0]);
+      const YRX = /\b(?:1[0-9]{3}|20[0-9]{2})\b/;
+      const pool2 = its.filter(it => !bref.includes(it) && it.s.length >= 60 && it.s.length <= 280 && !PRON.test(it.s) && !/…$/.test(it.s) && !/[:«“]\s*$/.test(it.s));
+      const labW = ((introHead && introHead.label) || subject || "").split(/\s+/).filter(w => w.length > 4).map(w => w.toLowerCase());
+      const DM = new RegExp("\\b\\d{1,2}(?:er)?\\s+(?:" + MONTHS + ")\\b|\\ban\\s+[IVX]+\\b|\\b(?:vendémiaire|brumaire|frimaire|nivôse|pluviôse|ventôse|germinal|floréal|prairial|messidor|thermidor|fructidor)\\b", "i");
+      const sc = it => (labW.length && labW.some(w => it.s.toLowerCase().includes(w)) ? 1.4 : 1) * (DM.test(it.s) ? 0.7 : 1) * it.imp * (CONCL.test(it.s) ? 1.6 : KEYCUE.test(it.s) ? 1.25 : 1) * (ranked.includes(entOf(it.s)) ? 1.35 : 1) * (YRX.test(it.s) ? 0.6 : 1) * (shown.has(it.k) ? 0.45 : 1) * (it.k >= NSENT - 2 ? 1.15 : 1);
+      const chosen = [], usedE = new Set();
+      for (const it of [...pool2].sort((x, y) => sc(y) - sc(x))) {
+        if (chosen.length >= keep.length) break;
+        const e = entOf(it.s);
+        if (e && usedE.has(e) && usedE.size < ranked.length) continue;
+        if (chosen.some(o => jac(o, it) > 0.35)) continue;
+        chosen.push(it); if (e) usedE.add(e);
+      }
+      if (chosen.length >= Math.min(2, keep.length)) { chosen.sort((x, y) => x.k - y.k); keep.length = 0; keep.push(...chosen); }
+    }
     if (chrono.length) {
       const DL = new RegExp("\\*\\*(?:\\d{1,2}(?:er)?\\s+)?(?:(?:" + MONTHS + ")\\s+)?(?:1[0-9]{3}|20[0-9]{2})[^*]*\\*\\*", "i");
       for (let i = facts.length - 1; i >= 0; i--) if (DL.test(facts[i]) && !/\*\*[^*]+\*\*,\s\*\*/.test(facts[i])) facts.splice(i, 1);
@@ -1188,7 +1211,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1647"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1652"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
