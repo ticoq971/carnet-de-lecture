@@ -1243,7 +1243,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1845"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1848"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
@@ -1422,9 +1422,10 @@ function vOverview(b) {
   return `<section class="panel">
     ${S.editBook ? `<h2>Informations</h2>${bookForm(b)}<div class="row"><button class="primary" data-a="savebook">Enregistrer</button><button class="ghost" data-a="canceledit">Annuler</button></div>` :
     `<div class="bookhead">${b.example ? `<span><span class="tag">Exemple</span></span>` : ""}<div class="meta">${meta}</div>${b.notes ? `<p class="muted" style="max-width:68ch">${esc(b.notes)}</p>` : ""}</div>
+    ${!b.example && all.length ? `<div class="row">${S.confirmDel === "restart" ? `<button class="danger" data-a="restart">Confirmer : effacer ${all.length > 1 ? "les " + all.length + " pages" : "la page"} et recommencer avec un autre texte</button><button class="ghost" data-a="nodel">Annuler</button>` : `<button class="ghost" data-a="askrestart">Recommencer avec un autre texte</button>`}<span class="muted small">Garde ce document (titre, informations) ; efface seulement ses pages.</span></div>` : ""}
     ${!b.example ? `<div class="row"><button class="ghost" data-a="editbook">Modifier les informations</button>${S.confirmDel === "book" ? `<button class="danger" data-a="delbook">Confirmer : supprimer le document et ses ${all.length} pages</button><button class="ghost" data-a="nodel">Annuler</button>` : `<button class="ghost danger" data-a="askdelbook">Supprimer le document</button>`}</div>` : ""}`}
   </section>
-  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Fiche de synthèse : tout le document</h2>${ps.length ? lenCtl() : ""}</div>
+  <section class="panel"><div class="row" style="justify-content:space-between"><h2>Fiche de synthèse : tout le document</h2>${ps.length ? `<span class="row small">${lenCtl()}<button class="ghost small" data-a="redo" title="Recalcule la fiche à partir du texte actuel">Refaire la fiche</button></span>` : ""}</div>
     ${ps.length ? vAI(b, "doc", ps) + vReperes(rep) : `<p class="muted">Ajoutez des pages ou collez un texte pour commencer.</p>`}
   </section>`;
 }
@@ -2063,6 +2064,18 @@ app.addEventListener("click", async e => {
     case "editbook": S.editBook = true; render(); break;
     case "canceledit": S.editBook = false; S.resetForms = true; render(); break;
     case "savebook": { const f = readBookForm(); if (!f.title) { toast("Le titre est obligatoire."); return; } Object.assign(b, f); if (await saveBookSafe(b)) { S.editBook = false; S.resetForms = true; toast("Informations enregistrées."); } render(); break; }
+    case "redo": nativeCache.clear(); anaCache.clear(); render(); toast("Fiche recalculée."); break;
+    case "askrestart": S.confirmDel = "restart"; render(); break;
+    case "restart": {
+      try {
+        for (const p of [...pagesOf(b.id)]) await Store.deletePage(b.id, p.id);
+        S.pages[b.id] = []; b.pageCount = 0; await saveBookSafe(b);
+        nativeCache.clear(); anaCache.clear();
+        S.sel = "overview"; S.addOpen = true; S.addTab = isBook(b) ? "photos" : "texte"; S.resetForms = true;
+        toast("Pages effacées. Collez le nouveau texte.");
+      } catch { toast("Opération impossible, réessayez."); }
+      S.confirmDel = null; render(); break;
+    }
     case "askdelbook": S.confirmDel = "book"; render(); break;
     case "nodel": S.confirmDel = null; render(); break;
     case "delbook": {
