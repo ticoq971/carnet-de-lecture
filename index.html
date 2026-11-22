@@ -818,27 +818,39 @@ const Analyse = (() => {
     const chrono = [];
     {
       const BADN = /^(?:Auprès|Après|Grâce|Dans|Selon|Pour|Avec|Sous|Vers|Sur|Chez|Lors|Depuis|Malgré|Durant|Pendant|After|Before|During|With|Under|From|According|Despite|Since|Among|Después|Durante|Según|Dopo|Secondo|Nach|Während|Laut|The|Le|La|Les|Un|Une|Il|Elle|He|She)\b/;
-      const names = [subject, ...a.people.map(p => p.name.replace(/[.,;]+$/, ""))].filter(n => n && n.length > 2 && !BADN.test(n) && !/(?:\b(?:St|Mme|Mr|Dr|Sr|Jr|Mgr|Ste)|-)$/.test(n) && cnt(n) >= 2 && (n === subject || /\s/.test(n) || !lowAll.has(n.toLowerCase()))).slice(0, 10);
+      const names = [introHead && introHead.label, subject, ...a.people.map(p => p.name.replace(/[.,;]+$/, ""))].filter(n => n && n.length > 2 && !BADN.test(n) && !/(?:\b(?:St|Mme|Mr|Dr|Sr|Jr|Mgr|Ste)|-)$/.test(n) && cnt(n) >= 2 && (n === subject || (introHead && n === introHead.label) || /\s/.test(n) || !lowAll.has(n.toLowerCase()))).slice(0, 10);
+      // ceux dont on parle souvent en tête de phrase (« L'Assemblée vote… ») comptent aussi
+      { const hc = new Map(); for (const it of its) { const m = it.s.slice(0, 50).match(new RegExp(NAMESPAN.source, "u")); if (m) { let t = m[0]; const w = t.split(/\s+/); if (w.length > 1 && /^(?:le|la|les|l|un|une|the|a|an|el|los|las|il|der|die|das|ein|eine)$/i.test(w[0])) t = w.slice(1).join(" "); hc.set(t, (hc.get(t) || 0) + 1); } }
+        [...hc.entries()].filter(([t, c]) => c >= (/\s/.test(t) ? 3 : 5) && t.length > 3 && !MON.test(t) && !ALLSTOP.has(norm(t)) && !TITLEW.has(t.toLowerCase()) && !BADN.test(t) && !names.some(n => n === t || n.includes(t) || t.includes(n))).sort((x, y) => y[1] - x[1]).slice(0, 4).forEach(([t]) => names.push(t)); }
       const ents = [];
       for (const n of names) {
         const last = n.split(/\s+/).pop();
-        let e = ents.find(x => x.keys.some(k => k === n || k === last) || (x.last === last && !/\s(?:de|du|des|of|von|der|di|del|della|d')\s/i.test(n + " " + x.name)));
+        const sameFirst = x => !/\s/.test(n) || !/\s/.test(x.name) || n.split(/\s+/)[0] === x.name.split(/\s+/)[0];
+        let e = ents.find(x => (x.keys.some(k => k === n || k === last) && sameFirst(x)) || (x.last === last && sameFirst(x) &&!/\s(?:de|du|des|of|von|der|di|del|della|d')\s/i.test(n + " " + x.name)));
         if (!e) { e = { name: n, last, keys: [], rows: [] }; ents.push(e); }
         if (n.length > e.name.length && n.split(/\s+/).length <= 3) e.name = n;
         if (!e.keys.includes(n)) e.keys.push(n);
-        if (last.length >= 4 && !e.keys.includes(last) && !/\s(?:de|du|des|of|von|der|di|del|della|d')\s/i.test(n)) e.keys.push(last);
+        { const first = n.split(/\s+/)[0]; if (n.includes(" ") && first.length >= 6 && /^\p{Lu}/u.test(first) && !e.keys.includes(first) && !/^(?:Saint|Sainte|Pierre|Charles|Louis|Marie)$/.test(first)) e.keys.push(first); }
+        if (last.length >= 4 && !lowAll.has(last.toLowerCase()) && !e.keys.includes(last) && !/\s(?:de|du|des|of|von|der|di|del|della|d')\s/i.test(n)) e.keys.push(last);
       }
-      const PRONS = /^(?:he|she|il|elle|él|ella|egli|ella|er|sie|they|ils|elles)\b/i;
+      const PRONS = /^(?:he|she|il|elle|él|ella|egli|er)\b(?!\s+(?:faut|faudra|fallait|y\s+a|s'agit|semble|convient|existe|reste|suffit|vaut|est\s+(?:possible|vrai|probable|important|nécessaire|temps|question))\b)/i;
       const YR = /\b(1[0-9]{3}|20[0-9]{2})\b/;
       const MASC = /^(?:he|il|él|egli|er)\b/i, FEM = /^(?:she|elle|ella|ella)\b/i;
       const mention = sn => {
         let best = null;
         for (const e of ents) for (const k of e.keys) {
-          const i = sn.search(new RegExp("(?:^|[^\\p{L}])" + rx(k) + "(?![\\p{L}])", "u"));
-          if (i >= 0 && (!best || i < best.i)) best = { e, i };
+          const mm = sn.match(new RegExp("(?:^|[^\\p{L}])(?:(\\p{Lu}[\\p{L}'’-]+)\\s+)?" + rx(k) + "(?![\\p{L}])", "u"));
+          if (!mm) continue;
+          // « Louis Martin » n'est pas « Céline Martin » : un autre prénom devant le même nom de famille écarte le rapprochement
+          if (mm[1] && /\s/.test(e.name) && k === e.last && !e.name.includes(mm[1])) continue;
+          const i = mm.index + (mm[0].length - k.length - (mm[1] ? mm[1].length + 1 : 0));
+          if (!best || i < best.i) best = { e, i };
         }
         // l'acteur de la phrase est celui qui est nommé en tête ; un nom perdu en fin de phrase n'est pas le sujet
-        return best && best.i <= 45 ? best.e : null;
+        if (!best || best.i > 45) return null;
+        const before = sn.slice(0, best.i).trim();
+        if (before && !/^(?:en|le|la|au|dès|vers|in|on|by|après|avant|lors|pendant|depuis|puis|ensuite|alors|enfin|mais|et|ainsi|plus tard|later|then|then,|en\s+\d{4}|le\s+\d+)\b[^,;:]{0,45}[,]?$/i.test(before)) return null;
+        return best.e;
       };
       // 1re passe : le genre d'un nom se lit dans le pronom de la phrase suivante
       const heads = its.map(it => mention(it.s));
@@ -857,6 +869,9 @@ const Analyse = (() => {
         }
         const ym = sn.match(YR);
         if (!ag || !ym) continue;
+        { const ye = sn.indexOf(ym[1]); let between = sn.slice(0, ye); const k = ag.keys.map(x => sn.indexOf(x)).filter(x => x >= 0); const st = k.length ? Math.min(...k) + 1 : 0; between = sn.slice(st, ye);
+          between = between.replace(ag.keys.slice().sort((x, y) => y.length - x.length).map(rx).join("|") ? new RegExp(ag.keys.slice().sort((x, y) => y.length - x.length).map(rx).join("|"), "g") : /$^/, " ").replace(/\b(?:à|au|aux|en|in|at|de|du|d'|of|near|à\s+la)\s+\p{Lu}[\p{L}-]*/gu, " ").replace(new RegExp("\b(?:" + MONTHS + ")\b", "gi"), " ");
+          if (/[\s(,]\p{Lu}/u.test(" " + between.trim()) && /\p{Lu}[\p{L}]+/u.test(between)) continue; }
         if (ag.rows.some(r => r.y === ym[1])) continue;
         const sr = PRONS.test(sn) ? sn.replace(PRONS, ag.name) : sn;
         let c = shorten(unlead(sr), 150);
@@ -866,7 +881,7 @@ const Analyse = (() => {
       }
       for (const e of ents.filter(x => x.rows.length >= 3).sort((x, y) => y.rows.length - x.rows.length).slice(0, 3)) {
         let rows = e.rows.sort((x, y) => +x.y - +y.y);
-        { const ok = rows.filter(r => !/^…/.test(r.t) && r.t.split(/\s+/).length >= 7); if (ok.length >= 3) rows = ok; }
+        rows = rows.filter(r => !/^…/.test(r.t) && r.t.split(/\s+/).length >= 7); if (rows.length < 3) continue;
         if (rows.length > 5) { const st = (rows.length - 1) / 4; rows = [0, 1, 2, 3, 4].map(i => rows[Math.round(i * st)]); }
         chrono.push({ name: e.name, rows: rows.map(r => r.t) });
       }
@@ -1112,7 +1127,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261122-1523"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261122-1526"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
