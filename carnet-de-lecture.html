@@ -402,7 +402,7 @@ const Analyse = (() => {
   // Bibliographie, mentions légales, fragments issus d'une mauvaise coupure : ce n'est pas du contenu.
   const REFLIKE = /\b(passim|ibid|op\.\s?cit|transcribed|copyright|all rights reserved|dedicated to|nihil obstat|imprimatur|bibliograph|please help|support the mission|advertis|contact us|subscribe to|webmaster|e-?mail address|reply to every|typographical errors|privacy policy|terms of (?:use|service)|click here|share this|newsletter|cookies?\b|donat(?:e|ion)|all for only|censor\b|S\. ?T\. ?D\.|kevin knight|new advent is|nous contacter|mentions légales|politique de confidentialité|abonnez-vous|tous droits réservés|todos los derechos|alle rechte vorbehalten|tutti i diritti)/i;
   const CITE = /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)/u;
-  const isRef = s => REFLIKE.test(s) || (s.match(/\([^()]*\b\d{4}\b[^()]*\)/g) || []).length >= 2 || /https?:\/\/|\$\s?\d|consulté le|retrieved\b|accessed\b|abgerufen am|consultado el|^ISBN\b|\bISBN\s?[\d-]{6,}|(?:\b[A-Z]\b\W+){8,}|,\s(?:Oxford|Cambridge|Paris|London|Londres|New York|Leiden|Leyde|Genève|Berlin|Rome|Madrid|Milano|Torino)\b[^.]{0,70}\b(?:1[4-9]|20)\d{2}\b|\S@\S|^Sources?\b|^See also\b|^Voir aussi\b|\bcitation\b|^About this page/i.test(s) || /^\p{Lu}{3,}[ ,]/u.test(s) || (CITE.test(s) && s.length < 170 && /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)[\s,.;IVX]*$/u.test(s));
+  const isRef = s => REFLIKE.test(s) || (s.match(/\([^()]*\b\d{4}\b[^()]*\)/g) || []).length >= 2 || /https?:\/\/|\$\s?\d|\b(?:Editions?|Éditions|Presses?|Press|Verlag|Publishers?)\b[^.]{0,25}\b(?:1[5-9]|20)\d{2}\b|consulté le|retrieved\b|accessed\b|abgerufen am|consultado el|^ISBN\b|\bISBN\s?[\d-]{6,}|(?:\b[A-Z]\b\W+){8,}|,\s(?:Oxford|Cambridge|Paris|London|Londres|New York|Leiden|Leyde|Genève|Berlin|Rome|Madrid|Milano|Torino)\b[^.]{0,70}\b(?:1[4-9]|20)\d{2}\b|\S@\S|^Sources?\b|^See also\b|^Voir aussi\b|\bcitation\b|^About this page/i.test(s) || /^\p{Lu}{3,}[ ,]/u.test(s) || (CITE.test(s) && s.length < 170 && /\([^()]*,\s*\d{4}(?:[-–]\d+)?\)[\s,.;IVX]*$/u.test(s));
   const broken = s => /^[^\p{L}\d"“«(‘'¿¡]/u.test(s) || /^\p{Ll}/u.test(s);
   const tidy = s => s.replace(/(^|\s)[|~^_=<>{}\\#*]+(?=\s|$)/g, " ").replace(/\s+([,.)\]])/g, "$1").replace(/([(\[])\s+/g, "$1").replace(/\s{2,}/g, " ").trim();
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -802,7 +802,7 @@ const Analyse = (() => {
     const chrono = [];
     {
       const BADN = /^(?:Auprès|Après|Grâce|Dans|Selon|Pour|Avec|Sous|Vers|Sur|Chez|Lors|Depuis|Malgré|Durant|Pendant|After|Before|During|With|Under|From|According|Despite|Since|Among|Después|Durante|Según|Dopo|Secondo|Nach|Während|Laut|The|Le|La|Les|Un|Une|Il|Elle|He|She)\b/;
-      const names = [subject, ...a.people.map(p => p.name.replace(/[.,;]+$/, ""))].filter(n => n && n.length > 2 && !BADN.test(n) && !/(?:\b(?:St|Mme|Mr|Dr|Sr|Jr|Mgr|Ste)|-)$/.test(n) && cnt(n) >= 2).slice(0, 10);
+      const names = [subject, ...a.people.map(p => p.name.replace(/[.,;]+$/, ""))].filter(n => n && n.length > 2 && !BADN.test(n) && !/(?:\b(?:St|Mme|Mr|Dr|Sr|Jr|Mgr|Ste)|-)$/.test(n) && cnt(n) >= 2 && (n === subject || /\s/.test(n) || !lowAll.has(n.toLowerCase()))).slice(0, 10);
       const ents = [];
       for (const n of names) {
         const last = n.split(/\s+/).pop();
@@ -814,17 +814,31 @@ const Analyse = (() => {
       }
       const PRONS = /^(?:he|she|il|elle|él|ella|egli|ella|er|sie|they|ils|elles)\b/i;
       const YR = /\b(1[0-9]{3}|20[0-9]{2})\b/;
-      let prev = null;
-      for (const it of its) {
-        const sn = it.s; let best = null;
+      const MASC = /^(?:he|il|él|egli|er)\b/i, FEM = /^(?:she|elle|ella|ella)\b/i;
+      const mention = sn => {
+        let best = null;
         for (const e of ents) for (const k of e.keys) {
           const i = sn.search(new RegExp("(?:^|[^\\p{L}])" + rx(k) + "(?![\\p{L}])", "u"));
           if (i >= 0 && (!best || i < best.i)) best = { e, i };
         }
         // l'acteur de la phrase est celui qui est nommé en tête ; un nom perdu en fin de phrase n'est pas le sujet
-        if (best && best.i > 45) best = null;
-        let ag = best ? best.e : (PRONS.test(sn) ? prev : null);
-        if (best) prev = best.e;
+        return best && best.i <= 45 ? best.e : null;
+      };
+      // 1re passe : le genre d'un nom se lit dans le pronom de la phrase suivante
+      const heads = its.map(it => mention(it.s));
+      ents.forEach(e => { e.m = 0; e.f = 0; });
+      its.forEach((it, i) => { if (i && heads[i - 1] && !heads[i]) { if (MASC.test(it.s)) heads[i - 1].m++; else if (FEM.test(it.s)) heads[i - 1].f++; } });
+      const gender = e => e.m > e.f * 2 ? "m" : e.f > e.m * 2 ? "f" : "";
+      // 2e passe : chaque pronom renvoie au dernier nom récent dont le genre convient
+      let recent = [];
+      for (let i = 0; i < its.length; i++) {
+        const it = its[i], sn = it.s;
+        let ag = heads[i];
+        if (ag) recent = [ag, ...recent.filter(x => x !== ag)].slice(0, 4);
+        else if (PRONS.test(sn)) {
+          const g = MASC.test(sn) ? "m" : FEM.test(sn) ? "f" : "";
+          ag = recent.find(x => !g || !gender(x) || gender(x) === g) || null;
+        }
         const ym = sn.match(YR);
         if (!ag || !ym) continue;
         if (ag.rows.some(r => r.y === ym[1])) continue;
@@ -836,6 +850,7 @@ const Analyse = (() => {
       }
       for (const e of ents.filter(x => x.rows.length >= 3).sort((x, y) => y.rows.length - x.rows.length).slice(0, 3)) {
         let rows = e.rows.sort((x, y) => +x.y - +y.y);
+        { const ok = rows.filter(r => !/^…/.test(r.t) && r.t.split(/\s+/).length >= 7); if (ok.length >= 3) rows = ok; }
         if (rows.length > 5) { const st = (rows.length - 1) / 4; rows = [0, 1, 2, 3, 4].map(i => rows[Math.round(i * st)]); }
         chrono.push({ name: e.name, rows: rows.map(r => r.t) });
       }
