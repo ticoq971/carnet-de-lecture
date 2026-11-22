@@ -444,7 +444,8 @@ const Analyse = (() => {
     const H = opts.h || ["En bref", "Les grandes parties", "Chiffres, dates et noms clés", "À retenir", "Page par page"];
     const P = { court: { parts: 2, per: 1, bref: 1, keep: 2, max: 170, facts: 4 }, moyen: { parts: 4, per: 2, bref: 2, keep: 3, max: 230, facts: 7 }, long: { parts: 6, per: 3, bref: 3, keep: 4, max: 320, facts: 12 } }[opts.len] || { parts: 4, per: 2, bref: 2, keep: 3, max: 230, facts: 7 };
     const a = analyse(pages, { lang: opts.lang });
-    const ref = pg => opts.noPages || !pg || pg === "?" ? "" : ` (p. ${pg})`;
+    const oneRef = pages.length <= 1;
+    const ref = pg => opts.noPages || oneRef || !pg || pg === "?" ? "" : ` (p. ${pg})`;
     const its = a.items.map(it => ({ ...it, s: tidy(it.s) })).map(it => ({ ...it, q: quality(it.s) })).filter(it => it.q >= 0.45 && it.t.length >= 3 && !isRef(it.s) && !broken(it.s));
     its.forEach((it, i) => it.k = i);
     const N = its.length;
@@ -579,7 +580,7 @@ const Analyse = (() => {
         label = (isTitle ? t0n : "") || subj2 || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
         if (!label) { const pn = a.people.map(p => p.name.replace(/[.,;]+$/, "")).find(n => cnt(n) >= 2); if (pn) label = pn; }
         if (!label) { const kt = [...keyTerms][0]; label = kt ? cap(form(kt)) : ""; }
-        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) label = w; } }
+        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) { const top = df.get(kt0); const more = [...keyTerms].slice(1).filter(t => df.get(t) >= Math.max(2, top * 0.6) && nn(t) >= 0.5 && t.length >= 4 && !MON.test(form(t))).slice(0, 2).map(t => form(t).toLowerCase()); label = [w, ...more].join(", "); } } }
         const last = label.toLowerCase().split(/\s+/).pop();
         const cand = its.slice(0, 3).find(it => last && !used.has(it.k) && !PRON.test(it.s) && it.s.toLowerCase().includes(last)) || its.find(it => !used.has(it.k) && !PRON.test(it.s)) || its.find(it => !used.has(it.k));
         if (label && cand) {
@@ -710,7 +711,7 @@ const Analyse = (() => {
       }
       return cap(top.slice(0, 2).map(form).join(" · "));
     };
-    const pageSpan = sg => { const pp = [...new Set(sg.items.map(it => it.page).filter(p => p && p !== "?"))]; return opts.noPages || !pp.length ? "" : pp.length === 1 ? ` (p. ${pp[0]})` : ` (p. ${pp[0]}) → (p. ${pp[pp.length - 1]})`; };
+    const pageSpan = sg => { const pp = [...new Set(sg.items.map(it => it.page).filter(p => p && p !== "?"))]; return opts.noPages || oneRef || !pp.length ? "" : pp.length === 1 ? ` (p. ${pp[0]})` : ` (p. ${pp[0]}) → (p. ${pp[pp.length - 1]})`; };
     const parts = segs.map(sg => {
       const per = opts.groups ? Math.max(1, P.per) : P.per;
       let ch = take(sg.items, per);
@@ -1013,7 +1014,10 @@ const Analyse = (() => {
       mdx += "\n## " + HQ[0] + "\n" + HQ[1] + "\n";
       for (const c of chrono) mdx += (c.name ? "### " + c.name + "\n" : "") + c.rows.map(r => "- " + r).join("\n") + "\n";
     }
-    if (facts.length) mdx += "\n## " + H[2] + "\n" + LL.facts + "\n" + facts.map(f => "- " + f).join("\n") + "\n";
+    if (facts.length) {
+      const onlyNames = H[2] === "Chiffres, dates et noms clés" && !facts.some(f => /\d/.test(f.replace(/\(p\. [^)]*\)/g, "")));
+      mdx += "\n## " + (onlyNames ? "Noms clés" : H[2]) + "\n" + (onlyNames ? "Voici les noms à connaître :" : LL.facts) + "\n" + facts.map(f => "- " + f).join("\n") + "\n";
+    }
     if (byPage.length) mdx += "\n## " + H[4] + "\n" + LL.pages + "\n" + byPage.map(f => "- " + f).join("\n") + "\n";
     if (keep.length) mdx += "\n## " + H[3] + "\n" + LL.keep + "\n" + keep.map(it => "- " + line(it, 200)).join("\n") + "\n";
     return mdx;
