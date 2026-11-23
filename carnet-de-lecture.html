@@ -507,7 +507,7 @@ const Analyse = (() => {
         if ((keyTerms.has(st) || nameSet.has(core)) && !seen.has(st) && core.length > 3 && !/^(?:first|second|third|fourth|fifth|last|word|words|name|names|year|years|time|times|thing|things|premier|première|mot|mots|nom|noms|année|années)$/i.test(core)) { seen.add(st); n++; last = off + w.length; return pre + "**" + core + "**"; }
         return w;
       });
-      return out.replace(/\*\*(\s+)\*\*/g, "$1");
+      return out.replace(/\*\*(\s+)\*\*/g, "$1").replace(/\*\*(\p{Lu}[\p{L}]+)\*\* ([IVX]{1,4})(?![\p{L}\p{N}])/gu, "**$1 $2**");
     };
     // Sujet principal du texte (personne la plus citée) : remplace le « he / il » d'une phrase sortie de son contexte.
     const keptTxt = its.map(it => it.s).join(" ");
@@ -586,7 +586,7 @@ const Analyse = (() => {
         label = (isTitle ? t0n : "") || subj2 || (t0.length > 2 && t0.length < 70 && t0.split(/\s+/).length <= 8 && !/[.;:!?]$/.test(t0) ? t0 : "");
         if (!label) { const pn = a.people.map(p => p.name.replace(/[.,;]+$/, "")).find(n => cnt(n) >= 2); if (pn) label = pn; }
         if (!label) { const kt = [...keyTerms][0]; label = kt ? cap(form(kt)) : ""; }
-        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) { const top = df.get(kt0); const more = [...keyTerms].slice(1).filter(t => df.get(t) >= Math.max(2, top * 0.6) && nn(t) >= 0.5 && t.length >= 4 && !MON.test(form(t))).slice(0, 2).map(t => form(t).toLowerCase()); label = [w, ...more].join(", "); thematic = true; } } }
+        { const kt0 = [...keyTerms][0]; if (!isTitle && kt0 && label && !/\s/.test(label) && stem(label.toLowerCase()) !== kt0 && df.get(kt0) > its.filter(it => it.s.includes(label)).length) { const w = cap(form(kt0)); if (w.length > 3) { const top = df.get(kt0); const more = [...keyTerms].slice(1).filter(t => df.get(t) >= Math.max(2, top * 0.6) && nn(t) >= 0.5 && t.length >= 4 && !MON.test(form(t))).slice(0, 2).map(t => nameSet.has(cap(form(t))) ? cap(form(t)) : form(t).toLowerCase()); label = [w, ...more].join(", "); thematic = true; } } }
         const last = label.toLowerCase().split(/\s+/).pop();
         const cand = its.slice(0, 3).find(it => last && !used.has(it.k) && !PRON.test(it.s) && it.s.toLowerCase().includes(last)) || its.find(it => !used.has(it.k) && !PRON.test(it.s)) || its.find(it => !used.has(it.k));
         if (label && cand) {
@@ -717,8 +717,66 @@ const Analyse = (() => {
       }
       return "";
     };
+    // Titre anglais : l'expression nominale la plus caractéristique de la partie (« Ecclesial ministry », « Evident signs »)
+    const EN_X = new Set("this that these those such which what who whom whose there here then than thus also very more most much many some any each every other another same only just even still yet not nor but and for with from into onto upon about above after again against among around before behind below beside between beyond during except inside outside over under until within without while though although because since whether either neither both being been have has had having does did done doing will would shall should could might must can may are was were its his her their our your mine him them one two three first second third new own way ways make makes made need needs say says said goes go going come comes came take takes took give gives gave see sees saw know knows known think thinks thought mention mentions believe believes seem seems become becomes find finds found use uses used call called work works well good great true often always never ever now already thing things lot kind sort part parts case cases fact point order person people world time times year years day days".split(" "));
+    const enCache = new Map();
+    const enCands = sg => {
+      if (enCache.has(sg)) return enCache.get(sg);
+      const m = new Map();
+      const add = (k, disp, w) => { const o = m.get(k); if (o) o.c += w; else m.set(k, { d: disp, c: w, n: k.split(" ").length }); };
+      sg.items.forEach(it => {
+        const clauses = it.s.replace(/\([^)]*\)/g, " ").split(/[,;:.!?—–“”"‘]+|\s[-–]\s/);
+        for (const cl of clauses) {
+          const ws = cl.split(/\s+/).filter(Boolean);
+          let run = [], first = true;
+          const flush = () => {
+            if (run.length) {
+              const ctoks = run.filter(t => t.c);
+              for (let i = 0; i < ctoks.length; i++) {
+                for (let n = 1; n <= 3 && i + n <= ctoks.length; n++) {
+                  const sp = ctoks.slice(i, i + n); const link = sp.slice(1).some(t => t.link);
+                  const core = sp.map(t => t.w);
+                  if (n === 1 && (core[0].length < 5 || !/^\p{Lu}/u.test(sp[0].raw) || sp[0].start)) continue;
+                  const last = core[n - 1]; if (sp[n - 1].vb) continue;
+                  if (/^(?:ly|ing|ed)$/.test(last.slice(-3)) || /(?:ly|ed)$/.test(last) || (/ing$/.test(last) && !/^\p{Lu}/u.test(sp[n - 1].raw))) continue;
+                  const disp = sp.map((t, j) => (j && t.sep ? t.sep + " " : "") + t.raw).join(" ");
+                  add(core.join(" "), disp, n === 1 ? 0.5 : 1);
+                }
+              }
+            }
+            run = [];
+          };
+          ws.forEach((raw0, wi) => {
+            const raw = raw0.replace(/^[^\p{L}]+|[^\p{L}\p{N}]+$/gu, ""); const w = raw.toLowerCase();
+            if ((w === "of" || w === "the") && run.length) { run.push({ c: false, link: true, w }); return; }
+            const roman = /^[IVX]{1,4}$/.test(raw) && run.length;
+            if (!roman && (raw.length < 3 || !/^[\p{L}][\p{L}'’\-]*$/u.test(raw) || EN_X.has(w) || ALLSTOP.has(norm(w)) || LEAD.test(w + " "))) { flush(); return; }
+            let t = { c: true, w, raw, start: wi === 0, vb: /^(?:the|a|an|this|these|those|his|her|their|its|our|my|your|to|not)$/i.test(ws[wi + 1] || "") && !/^\p{Lu}/u.test(raw) || /^(?:the|a|an|this|these|those|his|her|their|its|our|my|your)$/i.test(ws[wi + 1] || "") };
+            // « Decree of the Laity » : le joint « of the » devient « of the » dans l'affichage
+            const lk = run.length && run[run.length - 1].link ? run.splice(run.findIndex(x => x.link)).map(x => x.w).join(" ") : "";
+            if (lk && !/^of(?: the)?$/.test(lk)) { flush(); } else if (lk) { if (run.length && /^\p{Lu}/u.test(raw)) t.sep = lk; else { flush(); } }
+            run.push(t);
+          });
+          flush();
+        }
+      });
+      enCache.set(sg, m); return m;
+    };
+    const enPhDf = new Map(); let enReady = false;
+    const enTitle = sg => {
+      if (!enReady) { segs.forEach(g => enCands(g).forEach((v, k) => enPhDf.set(k, (enPhDf.get(k) || 0) + 1))); enReady = true; }
+      const head = new RegExp("(?:tion|sion|ment|ity|ness|ism|ship|ance|ence|ogy|ry|ate|ure|age|ics|ure|ion|ist|ers?)s?$");
+      const top = [...enCands(sg)].map(([k, v]) => {
+        const last = k.split(" ").pop();
+        const cap0 = /^\p{Lu}/u.test(v.d) && v.n > 1 ? 1.25 : 1;
+        return [v.d, v.c * Math.log(1 + segs.length / enPhDf.get(k)) * (1 + 0.5 * (v.n - 1)) * (head.test(last) ? 1.3 : 1) * cap0 * (v.n === 1 ? 0.7 : 1)];
+      }).sort((x, y) => y[1] - x[1]);
+      if (!top.length || top[0][1] < 0.8) return "";
+      return cap(top[0][0]);
+    };
     const titleOf = sg => {
       if (thematic && /^fr/.test(opts.lang || "fra") && segs.length > 1) { const tt = npTitle(sg); if (tt) return tt; }
+      if (/^en/.test(opts.lang || "") && segs.length > 1) { const et = enTitle(sg); if (et) return et; }
       const nt = segs.length > 1 ? nameTitle(sg) : ""; if (nt) return nt;
       const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
       const top = [...f.entries()].filter(([t]) => t.length >= 3 && !/^(?:first|second|third|fourth|fifth|last|next|new|old|premier|première|second|dernier|ancien|nouveau|primero|segundo|erste|zweite)$/i.test(form(t)) && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) && !thematic ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
@@ -1291,8 +1349,12 @@ function ocrText(data) {
     const paras = ocrLines(data), lines = paras.flat();
     if (lines.filter(l => l.words.length >= 4).length < 4) return raw;
     const L = ocrLeft(paras);
-    const keep = w => w.bbox && w.confidence >= 35 && w.bbox.x0 >= L - 12 && /[\p{L}\p{N}]/u.test(w.text) && !(w.text.length === 1 && w.confidence < 85 && !/[aAiIyYàÀ]/.test(w.text));
-    const out = paras.map(ls => ls.map(l => l.words.filter(keep).map(w => w.text).join(" ")).filter(t => t.trim()).join("\n")).filter(t => t.trim()).join("\n\n");
+    const hs = lines.flatMap(l => l.words).map(w => w.bbox ? w.bbox.y1 - w.bbox.y0 : 0).filter(h => h > 0).sort((x, y) => x - y), mh = hs[Math.floor(hs.length / 2)] || 0;
+    const small = new Set("a i y à an as at be by do he if in is it me my no of on or so to up us we de du en et il je la le ne ou se un au ce ma mi sa ta tu va y el es lo un si su ya da di e è il in la ne ha ho io ma mi my um wo zu ab am an da du er es ja so".split(" "));
+    const keep = w => w.bbox && w.confidence >= 35 && w.bbox.x0 >= L - 12 && /[\p{L}\p{N}]/u.test(w.text) && !(w.text.length === 1 && w.confidence < 85 && !/[aAiIyYàÀ]/.test(w.text))
+      && !(mh && w.bbox.y1 - w.bbox.y0 < 0.4 * mh)
+      && !(w.text.length <= 2 && w.confidence < 60 && !small.has(w.text.toLowerCase().replace(/[^\p{L}]/gu, "")) && !/^[IVX]{2}$|\d/.test(w.text));
+    const out = paras.map(ls => ls.map(l => l.words.filter(keep).map(w => w.text).join(" ").replace(/^\d[\d:,.\-–]*\)[.,;:]?\s+/, "")).filter(t => t.trim()).join("\n")).filter(t => t.trim()).join("\n\n");
     const lt = s => (s.match(/\p{L}/gu) || []).length;
     return lt(out) >= 0.35 * lt(raw) && lt(out) >= 40 ? out : raw;
   } catch { return raw; }
