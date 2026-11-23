@@ -442,6 +442,8 @@ const Analyse = (() => {
   // Retire ce qui n'est pas du texte : « Previous - Next », numéros de paragraphe (« 85 »), intertitres collés devant un numéro.
   const cleanText = t => {
     t = String(t || "").replace(/\r/g, "");
+    // chiffres romains mal lus par l'OCR après un nom de concile, de pape ou de roi (« Vatican 11 » → « Vatican II »)
+    t = t.replace(/\b(Vatican|Council|Concile|Concilio|Pius|Pie|Pio|John|Jean|Juan|Giovanni|Paul|Pablo|Paolo|Louis|Luis|Luigi|Leo|Léon|León|Benedict|Benoît|Benedicto|Benedetto|Gregory|Grégoire|Gregorio|Charles|Henri|Henry|Pierre)\s+(?:11|1l|ll|Il|l1|lI)(?=[\s.,;:)])/g, "$1 II");
     { const m = /^[ \t]*=+[ \t]*(?:Notes? et références|Notes|Références|Bibliographie|Liens externes|Voir aussi|Articles connexes|Annexes|Sources|References|Bibliography|External links|See also|Further reading|Referencias|Bibliografía|Enlaces externos|Riferimenti|Bibliografia|Collegamenti esterni|Einzelnachweise|Literatur|Weblinks)[ \t]*=+[ \t]*$/gim; let c, last = -1; while ((c = m.exec(t))) { if (c.index > t.length * 0.4) { last = c.index; break; } } if (last > 0) t = t.slice(0, last); }
     // renvois de références (« (cf. SC 7) », « (PO 5 ; cf. SC 122-127) », « (MF) ») : utiles en note, pas dans un résumé
     t = t.replace(/\s*\(\s*(?:cf\.?|voir|see|vgl\.?|véase|vedi)\s[^()]{1,80}\)/gi, "").replace(/\s*\(\s*[A-Z]{2,6}[a-z]?\s*\d{1,4}(?:[,.;:\-–]\s*\d{1,4})*(?:\s*;[^()]{1,50})?\s*\)/g, "").replace(/\s*\(\s*[A-Z]{2,5}\s*\)/g, "").replace(/\s+([.,;])/g, "$1");
@@ -732,7 +734,7 @@ const Analyse = (() => {
       return "";
     };
     const titleOf = sg => {
-      if (thematic && /^fr/.test(opts.out || "fra") && segs.length > 1) { const tt = npTitle(sg); if (tt) return tt; }
+      if (thematic && /^fr/.test(opts.lang || "fra") && segs.length > 1) { const tt = npTitle(sg); if (tt) return tt; }
       const nt = segs.length > 1 ? nameTitle(sg) : ""; if (nt) return nt;
       const f = new Map(); sg.items.forEach(it => new Set(it.t).forEach(t => f.set(t, (f.get(t) || 0) + 1)));
       const top = [...f.entries()].filter(([t]) => t.length >= 3 && !/^(?:first|second|third|fourth|fifth|last|next|new|old|premier|première|second|dernier|ancien|nouveau|primero|segundo|erste|zweite)$/i.test(form(t)) && !MON.test(form(t)) && !LEAD.test(form(t) + " ")).map(([t, c]) => [t, (c * Math.log(1 + segs.length / segDf.get(t)) + c * 0.15 + (keyTerms.has(t) ? 0.3 : 0)) * (0.3 + nn(t) + (nameStem.has(t) && !thematic ? 0.5 : 0))]).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => x[0]);
@@ -1198,7 +1200,7 @@ async function loadImage(file) {
   const w = bmp.width, h = bmp.height, scale = Math.min(1, 2400 / Math.max(w, h));
   const c = document.createElement("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
   const ctx = c.getContext("2d"); ctx.filter = "grayscale(1)"; ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  try { return deskew(normalizeLight(c)); } catch (e) { console.warn("prétraitement", e); ctx.filter = "none"; return c; }
+  try { const nl = normalizeLight(c); return window.__noDewarp ? deskew(nl) : dewarp(nl); } catch (e) { console.warn("prétraitement", e); ctx.filter = "none"; return c; }
 }
 // Éclaire la page uniformément : on divise par le fond flou (ombres, doigts, reflets), puis on renforce le contraste
 function normalizeLight(src) {
@@ -1209,6 +1211,41 @@ function normalizeLight(src) {
   for (let i = 0; i < d.length; i += 4) { const v = Math.min(1, d[i] / Math.max(1, e[i])); d[i] = d[i + 1] = d[i + 2] = 255 * v * v * v; }
   const o = document.createElement("canvas"); o.width = w; o.height = h; o.getContext("2d").putImageData(g, 0, 0);
   return o;
+}
+// Redresse la courbure de la page : l'inclinaison des lignes est mesurée par petites zones (8 colonnes × 4 bandes), puis chaque colonne de pixels est remontée ou descendue pour aplatir les lignes
+function dewarp(src) {
+  const KX = 8, KY = 4, sc = Math.min(1, 700 / src.width), w = Math.round(src.width * sc), h = Math.round(src.height * sc);
+  const s = document.createElement("canvas"); s.width = w; s.height = h; s.getContext("2d").drawImage(src, 0, 0, w, h);
+  const d = s.getContext("2d").getImageData(0, 0, w, h).data, cells = Array.from({ length: KY }, () => Array.from({ length: KX }, () => []));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4] < 110) cells[Math.min(KY - 1, Math.floor(y * KY / h))][Math.min(KX - 1, Math.floor(x * KX / w))].push(x, y);
+  const angles = []; for (let a = -7; a <= 7.001; a += 0.4) angles.push(a);
+  const slopeOf = (pts, xc) => {
+    if (pts.length < 300) return null;
+    let best = 0, bs = -1;
+    for (const a of angles) { const r = a * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r), hist = new Float32Array(h * 2 + 8); for (let i = 0; i < pts.length; i += 2) hist[Math.max(0, Math.min(hist.length - 1, Math.round(pts[i + 1] * cs - (pts[i] - xc) * sn + h)))]++; let t = 0; for (const v of hist) t += v * v; if (t > bs) { bs = t; best = a; } }
+    return Math.tan(best * Math.PI / 180);
+  };
+  const sl = cells.map(row => row.map((pts, k) => slopeOf(pts, (k + 0.5) * w / KX)));
+  const all = sl.flat().filter(v => v != null).sort((a, b) => a - b); if (all.length < KX) return src;
+  const gm = all[Math.floor(all.length / 2)];
+  const rowSlopes = sl.map(row => { const r = row.map(v => v == null ? null : v); for (let k = 0; k < KX; k++) if (r[k] == null) { let a = k - 1, b = k + 1; while (a >= 0 && row[a] == null) a--; while (b < KX && row[b] == null) b++; r[k] = a >= 0 && b < KX ? (row[a] + row[b]) / 2 : a >= 0 ? row[a] : b < KX ? row[b] : gm; } return r.map((v, k) => { const t = [r[Math.max(0, k - 1)], v, r[Math.min(KX - 1, k + 1)]].sort((p, q) => p - q); return t[1]; }); });
+  // décalage vertical par bande et par colonne : somme des pentes, centrée sur zéro
+  const dy = rowSlopes.map(r => { const o = new Float32Array(w + 1); let acc = 0; for (let x = 0; x < w; x++) { const f = Math.max(0, Math.min(KX - 1, x * KX / w - 0.5)), k0 = Math.floor(f), k1 = Math.min(KX - 1, k0 + 1), t = f - k0; acc += r[k0] * (1 - t) + r[k1] * t; o[x] = acc; } let m = 0; for (let x = 0; x < w; x++) m += o[x]; m /= w; for (let x = 0; x <= w; x++) o[x] -= m; return o; });
+  let mx = 0; dy.forEach(o => o.forEach(v => { mx = Math.max(mx, Math.abs(v)); }));
+  if (mx / sc < 4) return src;
+  const W = src.width, H = src.height, sx = src.getContext("2d").getImageData(0, 0, W, H), sd = sx.data;
+  const out = new ImageData(W, H), od = out.data;
+  for (let x = 0; x < W; x++) {
+    const xi = Math.min(w - 1, Math.floor(x * sc));
+    for (let y = 0; y < H; y++) {
+      const fb = Math.max(0, Math.min(KY - 1, y * sc * KY / h - 0.5)), b0 = Math.floor(fb), b1 = Math.min(KY - 1, b0 + 1), tb = fb - b0;
+      const ys = y + (dy[b0][xi] * (1 - tb) + dy[b1][xi] * tb) / sc, y0 = Math.floor(ys), t = ys - y0;
+      let v = 255; if (y0 >= 0 && y0 + 1 < H) v = sd[(y0 * W + x) * 4] * (1 - t) + sd[((y0 + 1) * W + x) * 4] * t;
+      const o = (y * W + x) * 4; od[o] = od[o + 1] = od[o + 2] = v; od[o + 3] = 255;
+    }
+  }
+  const c = document.createElement("canvas"); c.width = W; c.height = H; c.getContext("2d").putImageData(out, 0, 0);
+  return c;
 }
 // Redresse les lignes de texte penchées (photo prise de biais) : on cherche l'angle où les lignes sont les plus nettes
 function deskew(src) {
@@ -1254,7 +1291,7 @@ const ocrSure = data => ocrLines(data).flat().flatMap(l => l.words).filter(w => 
 async function readPhoto(worker, canvas) {
   const d1 = (await worker.recognize(canvas, { rotateAuto: true })).data;
   try {
-    if (Math.abs(d1.rotateRadians || 0) > 0.05) return d1;
+    if (Math.abs(d1.rotateRadians || 0) > 0.05 || d1.confidence >= 85) return d1;
     const bx = ocrBox(d1); if (!bx) return d1;
     const m = Math.round(0.02 * canvas.width), x0 = Math.max(0, Math.round(bx.x0) - m), y0 = Math.max(0, Math.round(bx.y0) - m), x1 = Math.min(canvas.width, Math.round(bx.x1) + m), y1 = Math.min(canvas.height, Math.round(bx.y1) + m);
     const cw = x1 - x0, ch = y1 - y0; if (cw < 300 || ch < 300 || (cw > 0.92 * canvas.width && ch > 0.92 * canvas.height)) return d1;
@@ -1270,7 +1307,7 @@ function ocrText(data) {
     const paras = ocrLines(data), lines = paras.flat();
     if (lines.filter(l => l.words.length >= 4).length < 4) return raw;
     const L = ocrLeft(paras);
-    const keep = w => w.bbox && w.confidence >= 35 && w.bbox.x0 >= L - 12 && /[\p{L}\p{N}]/u.test(w.text);
+    const keep = w => w.bbox && w.confidence >= 35 && w.bbox.x0 >= L - 12 && /[\p{L}\p{N}]/u.test(w.text) && !(w.text.length === 1 && w.confidence < 85 && !/[aAiIyYàÀ]/.test(w.text));
     const out = paras.map(ls => ls.map(l => l.words.filter(keep).map(w => w.text).join(" ")).filter(t => t.trim()).join("\n")).filter(t => t.trim()).join("\n\n");
     const lt = s => (s.match(/\p{L}/gu) || []).length;
     return lt(out) >= 0.35 * lt(raw) && lt(out) >= 40 ? out : raw;
@@ -1323,7 +1360,7 @@ function render() {
 }
 
 /* ---------- mises à jour : compare la version de la page à version.json sur le site ---------- */
-const APP_VERSION = "20261123-0059"; // remplacé par build.js (date et heure de la publication)
+const APP_VERSION = "20261123-0108"; // remplacé par build.js (date et heure de la publication)
 const Updates = {
   remote: null, dismissed: false,
   enabled() { return !window.claude && !APP_VERSION.startsWith("__"); },
